@@ -14,6 +14,7 @@ export function NewRequest({ app, previewOpen, setPreviewOpen }: { app: AppState
 
   let tone: 'ok' | 'warn', text: string;
   if (st.extras.length) { tone = 'warn'; text = `Not available yet: ${st.extras.join(', ')}. Submitting sends a request to the data team to build it. Delivery starts once they finish.`; }
+  else if (graph.nodes.length === 1) { tone = 'warn'; text = 'Start by clicking a source above, or drag one onto the canvas.'; }
   else if (st.miss) { tone = 'warn'; text = 'Some steps are not connected yet. Drag from a right-hand dot to a left-hand dot.'; }
   else { tone = 'ok'; text = 'Ready. Every column exists today, so no engineering is needed.'; }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { datasets } from './catalog';
 import { compileFlow, firstBlocking } from './sql';
-import { analyse, chain, cleanGraph, defaultFlow, defCfg, layout, PORTS, reach, seedRequests } from './graph';
+import { analyse, blankFlow, chain, cleanGraph, defCfg, layout, PORTS, reach, seedRequests } from './graph';
 import type { Cfg, Edge, FlowNode, Graph, NodeType, Port, ReportRequest, RequestStatus } from './types';
 
 export type Page = 'catalog' | 'new' | 'mine' | 'appr' | 'prev';
@@ -16,8 +16,8 @@ export const MAX_ZOOM = 1.6;
  */
 export function useApp() {
   const [page, setPage] = useState<Page>('new');
-  const [graph, setGraph] = useState<Graph>(defaultFlow);
-  const [selected, setSelected] = useState('n3');
+  const [graph, setGraph] = useState<Graph>(blankFlow);
+  const [selected, setSelected] = useState('s3');
   const [zoom, setZoom] = useState(1);
   const [requests, setRequests] = useState<ReportRequest[]>(seedRequests);
   const [prevId, setPrevId] = useState('R-101');
@@ -48,19 +48,31 @@ export function useApp() {
   const moveNode = (id: string, x: number, y: number) =>
     setGraph((g) => ({ ...g, nodes: g.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)) }));
 
-  /** Adds a step. With no position it is inserted after the selected step and the flow is tidied. */
+  /**
+   * Adds a step. With no position it is inserted after the selected step and the flow is tidied.
+   * A step with nothing after it is joined to the S3 output when that is still unconnected, so a new flow is never left dangling.
+   */
   const addFn = (type: NodeType, key?: string, pos?: [number, number]) => {
     const id = 'n' + nextId.current++;
     const node: FlowNode = { id, type, x: pos ? pos[0] : 0, y: pos ? pos[1] : 0, cfg: defCfg(type, key) };
     let edges = graph.edges.slice();
+    let nodes = graph.nodes.concat(node);
+    const s3 = graph.nodes.find((n) => n.type === 's3')!;
+    const s3Free = !edges.some((e) => e.to === s3.id);
     const sel = graph.nodes.find((n) => n.id === selected);
     if (!pos && sel && sel.type !== 's3' && type !== 'source') {
       const inPort = PORTS[type][0][0];
       const down = edges.find((e) => e.from === sel.id);
       if (down) edges = edges.map((e) => (e === down ? { ...e, from: id } : e));
+      else if (s3Free) edges.push({ from: id, to: s3.id, port: 'in' });
       edges.push({ from: sel.id, to: id, port: inPort });
+    } else if (type === 'source' && graph.nodes.length === 1 && s3Free) {
+      edges.push({ from: id, to: s3.id, port: 'in' }); // first source on a blank canvas
     }
-    let g: Graph = { nodes: graph.nodes.concat(node), edges };
+    if (type === 'source' && !s3.cfg.folder && key) {
+      nodes = nodes.map((n) => (n.id === s3.id ? { ...n, cfg: { ...n.cfg, folder: datasets[key].folder } } : n));
+    }
+    let g: Graph = { nodes, edges };
     if (!pos) g = layout(g);
     setGraph(g);
     setSelected(id);
@@ -93,8 +105,8 @@ export function useApp() {
   const removeEdge = (e: Edge) => setGraph((g) => ({ ...g, edges: g.edges.filter((q) => q !== e) }));
   const tidy = () => setGraph((g) => layout(cleanGraph(g.nodes, g.edges)));
   const resetFlow = () => {
-    setGraph(defaultFlow());
-    setSelected('n3');
+    setGraph(blankFlow());
+    setSelected('s3');
   };
 
   const loadGraph = (g: Graph, sel: string) => {

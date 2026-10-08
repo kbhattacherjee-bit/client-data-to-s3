@@ -74,6 +74,12 @@ export function chain(ds: string, mids: { type: NodeType; cfg: Cfg }[], client: 
   return layout({ nodes, edges });
 }
 
+/** An empty canvas: just the S3 output, which every flow needs. */
+export function blankFlow(): Graph {
+  return layout({ nodes: [{ id: 's3', type: 's3', x: 0, y: 0, cfg: { client: 'acme', folder: '', fmt: 'CSV' } }], edges: [] });
+}
+
+/** A worked example (source, join, filter, select). Used by tests; the app itself starts blank. */
 export function defaultFlow(): Graph {
   return layout({
     nodes: [
