@@ -63,15 +63,15 @@ describe('comparison operators', () => {
 
   it('summaries read naturally', () => {
     const s = (rule: R) => run(rule).summary[1];
-    expect(s({ col: 'fees', op: 'gte', val: '10' })).toBe('Keep rows where fees is at least 10');
-    expect(s({ col: 'fees', op: 'lte', val: '10' })).toBe('Keep rows where fees is at most 10');
+    expect(s({ col: 'fees', op: 'gte', val: '10' })).toBe('Keep rows where fees is greater than or equal to 10');
+    expect(s({ col: 'fees', op: 'lte', val: '10' })).toBe('Keep rows where fees is less than or equal to 10');
     expect(s({ col: 'fees', op: 'between', val: '10', val2: '50' })).toBe('Keep rows where fees is between 10 and 50');
     expect(s({ col: 'desk', op: 'in', vals: ['Cash', 'Options'] })).toBe('Keep rows where desk is one of "Cash", "Options"');
     expect(s({ col: 'fees', op: 'is_null' })).toBe('Keep rows where fees is blank');
   });
 
   it('every operator is allowed only on the column types that make sense', () => {
-    expect(errs({ col: 'desk', op: 'gte', val: 'a' })[0]).toMatch(/cannot be compared with "is at least"/);
+    expect(errs({ col: 'desk', op: 'gte', val: 'a' })[0]).toMatch(/cannot be compared with "is greater than or equal to"/);
     expect(errs({ col: 'desk', op: 'between', val: 'a', val2: 'b' })[0]).toMatch(/cannot be compared/);
     expect(errs({ col: 'fees', op: 'starts_with', val: '1' })[0]).toMatch(/cannot be compared with "starts with"/);
     expect(errs({ col: 'fees', op: 'not_contains', val: '1' })[0]).toMatch(/cannot be compared/);

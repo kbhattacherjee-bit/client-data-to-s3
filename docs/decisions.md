@@ -64,7 +64,7 @@
 ## 2026-10-09: More filter operators
 
 - **DECIDED (by the user):** filters offer the usual comparisons, not just greater/less/equals/contains.
-- Operators: equals, does not equal, greater than, at least (>=), less than, at most (<=), between (inclusive),
+- Operators: equals, does not equal, greater than, greater than or equal to, less than, less than or equal to, between (inclusive),
   is one of, is not one of, contains, does not contain, starts with, ends with, is blank, is not blank.
 - Allowed by column type (`OPS_BY_TYPE` in the compiler, also used by the UI): number, date and timestamp take the
   comparisons, between, in lists and blank checks; text takes equals, contains, starts/ends with, lists and blank

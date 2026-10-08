@@ -69,7 +69,7 @@ const isDate = (s: string) => {
 };
 
 export const OP_PHRASE: Record<FilterOp, string> = {
-  eq: 'equals', ne: 'does not equal', gt: 'is greater than', gte: 'is at least', lt: 'is less than', lte: 'is at most',
+  eq: 'equals', ne: 'does not equal', gt: 'is greater than', gte: 'is greater than or equal to', lt: 'is less than', lte: 'is less than or equal to',
   between: 'is between', in: 'is one of', not_in: 'is not one of', contains: 'contains', not_contains: 'does not contain',
   starts_with: 'starts with', ends_with: 'ends with', is_null: 'is blank', is_not_null: 'is not blank',
 };
