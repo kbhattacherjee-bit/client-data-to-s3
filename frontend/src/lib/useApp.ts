@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { datasets } from './catalog';
+import { compileFlow, firstBlocking } from './sql';
 import { analyse, chain, cleanGraph, defaultFlow, defCfg, layout, PORTS, reach, seedRequests } from './graph';
 import type { Cfg, Edge, FlowNode, Graph, NodeType, Port, ReportRequest, RequestStatus } from './types';
 
@@ -34,6 +35,7 @@ export function useApp() {
   const { nodes } = graph;
   const view = cleanGraph(nodes, graph.edges);
   const { T, st } = analyse(view);
+  const sql = compileFlow(view);
 
   const zoomBy = useCallback((d: number) => setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + d) * 100) / 100))), []);
 
@@ -77,13 +79,15 @@ export function useApp() {
     setSelected(up || 's3');
   };
 
-  const connect = (from: string, to: string, port: Port) => {
+  /** Connects `from` to an input. With `replacing`, that arrow is moved instead of a new one added. */
+  const connect = (from: string, to: string, port: Port, replacing?: Edge) => {
     if (from === to) return;
-    if (reach(graph, to, from)) {
+    const base: Graph = replacing ? { ...graph, edges: graph.edges.filter((e) => e !== replacing) } : graph;
+    if (reach(base, to, from)) {
       showToast('That would create a loop.');
       return;
     }
-    setGraph((g) => ({ ...g, edges: g.edges.filter((e) => !(e.to === to && e.port === port)).concat({ from, to, port }) }));
+    setGraph((g) => ({ ...g, edges: g.edges.filter((e) => e !== replacing && !(e.to === to && e.port === port)).concat({ from, to, port }) }));
   };
 
   const removeEdge = (e: Edge) => setGraph((g) => ({ ...g, edges: g.edges.filter((q) => q !== e) }));
@@ -105,6 +109,8 @@ export function useApp() {
 
   const submit = () => {
     if (st.miss) return showToast('Connect every step before submitting.');
+    const blocking = firstBlocking(sql);
+    if (blocking) return showToast(blocking.message);
     const src = graph.nodes.find((n) => n.type === 'source')!;
     const s3 = graph.nodes.find((n) => n.type === 's3')!;
     const needs = st.extras.length > 0;
@@ -156,7 +162,7 @@ export function useApp() {
   }, []);
 
   return {
-    page, setPage, graph: view, T, st, selected, setSelected, zoom, setZoom, zoomBy,
+    page, setPage, graph: view, T, st, sql, selected, setSelected, zoom, setZoom, zoomBy,
     requests, prevId, setPrevId, toast, showToast,
     patchCfg, moveNode, addFn, delNode, connect, removeEdge, tidy, resetFlow, loadGraph, startWith, submit, setStatus,
   };

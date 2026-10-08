@@ -1,12 +1,14 @@
 import { Canvas } from '../components/Canvas';
 import { DataTable } from '../components/DataTable';
 import { Palette } from '../components/Palette';
-import { StepPanel } from '../components/StepPanel';
+import { StepPanel, type PanelTab } from '../components/StepPanel';
+import { useState } from 'react';
 import { s3Path } from '../lib/catalog';
 import type { AppState } from '../lib/useApp';
 
 export function NewRequest({ app, previewOpen, setPreviewOpen }: { app: AppState; previewOpen: boolean; setPreviewOpen: (v: boolean) => void }) {
-  const { st, zoom, graph } = app;
+  const { st, zoom, graph, sql } = app;
+  const [tab, setTab] = useState<PanelTab>('step');
   const s3 = graph.nodes.find((n) => n.type === 's3')!;
   const fin = st.final;
 
@@ -14,6 +16,8 @@ export function NewRequest({ app, previewOpen, setPreviewOpen }: { app: AppState
   if (st.extras.length) { tone = 'warn'; text = `Not available yet: ${st.extras.join(', ')}. Submitting sends a request to the data team to build it. Delivery starts once they finish.`; }
   else if (st.miss) { tone = 'warn'; text = 'Some steps are not connected yet. Drag from a right-hand dot to a left-hand dot.'; }
   else { tone = 'ok'; text = 'Ready. Every column exists today, so no engineering is needed.'; }
+
+  const sqlNote = sql.ok ? `SQL ready: ${sql.result.summary.length - 1} steps, ${sql.result.outputColumns.length} columns.` : `SQL not ready: ${sql.issues[0]?.message ?? ''}`;
 
   return (
     <div className="builder">
@@ -48,10 +52,13 @@ export function NewRequest({ app, previewOpen, setPreviewOpen }: { app: AppState
         </div>
         <div className="banner" style={{ background: `var(--${tone}-bg)`, borderColor: `var(--${tone})` }}>
           <span className="banner-dot" style={{ background: `var(--${tone})` }} />
-          <span style={{ lineHeight: 1.45 }}>{text}</span>
+          <span style={{ lineHeight: 1.45 }}>
+            {text}
+            <div className="banner-note">{sqlNote} <button className="link" onClick={() => setTab('sql')}>View SQL</button></div>
+          </span>
         </div>
       </div>
-      <StepPanel app={app} />
+      <StepPanel app={app} tab={tab} setTab={setTab} />
     </div>
   );
 }

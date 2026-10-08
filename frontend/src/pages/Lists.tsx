@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { DataTable } from '../components/DataTable';
+import { SqlPanel } from '../components/SqlPanel';
+import { compileFlow } from '../lib/sql';
 import { clients, datasets, s3Path } from '../lib/catalog';
 import { analyse } from '../lib/graph';
 import type { AppState } from '../lib/useApp';
@@ -56,6 +59,7 @@ export function MinePage({ app }: { app: AppState }) {
 
 export function ApprovalsPage({ app }: { app: AppState }) {
   const pending = app.requests.filter((r) => r.status === 'Pending');
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="page-scroll">
       <div className="col-narrow">
@@ -74,12 +78,14 @@ export function ApprovalsPage({ app }: { app: AppState }) {
                 <span className="tag" style={{ background: needs ? 'var(--warn-bg)' : 'var(--ok-bg)' }}>{needs ? 'Needs new layer' : 'Config-only'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button className="btn" style={{ fontWeight: 400 }} aria-expanded={open === r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>{open === r.id ? 'Hide SQL' : 'Review SQL'}</button>
                 <button className="btn" style={{ fontWeight: 400 }} onClick={() => { app.setPrevId(r.id); app.setPage('prev'); }}>Preview</button>
                 <button className="btn" style={{ fontWeight: 400 }} onClick={() => app.setStatus(r.id, 'Rejected')}>Reject</button>
                 <button className="btn primary" onClick={() => { app.setStatus(r.id, needs ? 'In data-eng' : 'Approved'); app.showToast(needs ? 'Data-engineering ticket DATASD-4821 opened.' : 'Approved.'); }}>
                   {needs ? 'Route to data-eng' : 'Approve'}
                 </button>
               </div>
+              {open === r.id && <div className="review"><SqlPanel outcome={compileFlow(r.graph, r.client)} /></div>}
             </div>
           );
         })}

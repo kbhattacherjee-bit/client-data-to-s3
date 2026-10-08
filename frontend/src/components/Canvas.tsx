@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { clients, datasets } from '../lib/catalog';
 import { NODE_H, NODE_W, PORTS } from '../lib/graph';
 import type { AppState } from '../lib/useApp';
-import type { FlowNode, NodeType, Port, Table } from '../lib/types';
+import { isGroup, type Edge, type FlowNode, type NodeType, type Port, type RuleItem, type Table } from '../lib/types';
 
 const bez = (a: number[], b: number[]) => {
   const k = Math.max(40, Math.abs(b[0] - a[0]) / 2);
@@ -10,6 +10,8 @@ const bez = (a: number[], b: number[]) => {
 };
 const outPos = (n: FlowNode) => [n.x + NODE_W, n.y + NODE_H / 2];
 const inPos = (n: FlowNode, p: Port) => [n.x, n.y + NODE_H * PORTS[n.type].find((q) => q[0] === p)![1]];
+
+const countRules = (items: RuleItem[]): number => items.reduce((n, x) => n + (isGroup(x) ? countRules(x.rules) : 1), 0);
 
 const OPS = { '+': '+', '-': '−', '*': '×', '/': '÷' } as const;
 
@@ -27,13 +29,13 @@ function describe(n: FlowNode, t: Table): { kicker: string; title: string; sub: 
       break;
     case 'filter':
       kicker = 'Filter rows';
-      title = c.rules!.length ? c.rules!.length + (c.rules!.length === 1 ? ' rule' : ' rules') : 'No rules';
+      { const k = countRules(c.rules ?? []); title = k ? k + (k === 1 ? ' rule' : ' rules') : 'No rules'; }
       sub = t.err ?? t.rows.length + ' rows remain';
       break;
     case 'group':
       kicker = 'Group by';
-      title = c.by || 'Choose a column';
-      sub = c.by ? { avg: 'Average', max: 'Max', sum: 'Sum' }[c.agg ?? 'sum'] : t.err ?? 'Not set';
+      title = c.by?.length ? c.by.join(', ') : 'Choose columns';
+      sub = c.by?.length ? `${c.aggs?.length ?? 0} total${c.aggs?.length === 1 ? '' : 's'}` : t.err ?? 'Not set';
       break;
     case 'addcol':
       kicker = 'Add column';
@@ -57,7 +59,9 @@ export function Canvas({ app }: { app: AppState }) {
   const { graph, T, zoom, selected } = app;
   const canvasRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
-  const link = useRef<{ from: string } | null>(null);
+  /** `replacing` is set while an existing arrow is being moved: it is hidden until dropped on an input, and kept if dropped elsewhere. */
+  const link = useRef<{ from: string; replacing?: Edge } | null>(null);
+  const [moving, setMoving] = useState<Edge | null>(null);
   const [linkPos, setLinkPos] = useState<[number, number] | null>(null);
   const [hover, setHover] = useState<string | null>(null);
 
@@ -78,7 +82,7 @@ export function Canvas({ app }: { app: AppState }) {
     };
     const up = () => {
       drag.current = null;
-      if (link.current) { link.current = null; setLinkPos(null); }
+      if (link.current) { link.current = null; setLinkPos(null); setMoving(null); }
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
@@ -88,7 +92,6 @@ export function Canvas({ app }: { app: AppState }) {
   const byId = (id: string) => graph.nodes.find((n) => n.id === id)!;
   const cw = Math.max(900, ...graph.nodes.map((n) => n.x + NODE_W + 60));
   const ch = Math.max(440, ...graph.nodes.map((n) => n.y + NODE_H + 60));
-  const hasIn = (id: string, p: Port) => graph.edges.some((e) => e.to === id && e.port === p);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -118,6 +121,7 @@ export function Canvas({ app }: { app: AppState }) {
               ))}
             </defs>
             {graph.edges.map((e, i) => {
+              if (e === moving) return null;
               const hi = e.from === selected || e.to === selected;
               return <path key={i} d={bez(outPos(byId(e.from)), inPos(byId(e.to), e.port))} fill="none" stroke={hi ? '#2563a8' : '#6b7685'} strokeWidth="1.6" markerEnd={hi ? 'url(#arrB)' : 'url(#arrG)'} />;
             })}
@@ -125,6 +129,7 @@ export function Canvas({ app }: { app: AppState }) {
           </svg>
 
           {graph.edges.map((e, i) => {
+            if (e === moving) return null;
             const A = outPos(byId(e.from)), B = inPos(byId(e.to), e.port);
             return (
               <button key={i} className="edge-x" title="Remove connection" aria-label="Remove connection" style={{ left: (A[0] + B[0]) / 2, top: (A[1] + B[1]) / 2 }} onClick={() => app.removeEdge(e)}>×</button>
@@ -133,6 +138,7 @@ export function Canvas({ app }: { app: AppState }) {
 
           {graph.nodes.map((n) => {
             const d = describe(n, T[n.id]);
+            if (!app.sql.ok && app.sql.issues.some((i) => i.nodeId === n.id)) d.warn = true;
             const on = n.id === selected;
             return (
               <div
@@ -153,17 +159,28 @@ export function Canvas({ app }: { app: AppState }) {
                 {n.type !== 's3' && (hover === n.id || on) && (
                   <button className="node-del" title="Delete this step" aria-label="Delete this step" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); app.delNode(n.id); }}>×</button>
                 )}
-                {PORTS[n.type].map(([p, f]) => (
-                  <button
-                    key={p}
-                    className={'port' + (hasIn(n.id, p) ? ' filled' : '')}
-                    title={portTitle(n.type, p)}
-                    aria-label={portTitle(n.type, p)}
-                    style={{ left: -8, top: NODE_H * f - 7 }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onMouseUp={() => { if (link.current) app.connect(link.current.from, n.id, p); }}
-                  />
-                ))}
+                {PORTS[n.type].map(([p, f]) => {
+                  const edge = graph.edges.find((x) => x.to === n.id && x.port === p);
+                  const label = portTitle(n.type, p) + (edge ? ' (drag to move this arrow)' : '');
+                  return (
+                    <button
+                      key={p}
+                      className={'port' + (edge ? ' filled movable' : '')}
+                      title={label}
+                      aria-label={label}
+                      style={{ left: -8, top: NODE_H * f - 7 }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        if (!edge) return;
+                        e.preventDefault();
+                        link.current = { from: edge.from, replacing: edge };
+                        setMoving(edge);
+                        setLinkPos(toCanvas(e));
+                      }}
+                      onMouseUp={() => { if (link.current) app.connect(link.current.from, n.id, p, link.current.replacing); }}
+                    />
+                  );
+                })}
                 {n.type !== 's3' && (
                   <button
                     className="port out"

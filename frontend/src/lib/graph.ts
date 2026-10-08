@@ -30,8 +30,8 @@ export const defCfg = (type: NodeType, ds?: string): Cfg =>
   ({
     source: { ds },
     select: { drop: [], extras: [] },
-    filter: { rules: [] },
-    group: { by: '', agg: 'sum' },
+    filter: { match: 'all', rules: [] },
+    group: { by: [], aggs: [] },
     addcol: { name: 'new_field', a: '', op: '*', b: '', num: '1' },
     join: { key: '', type: 'inner' },
     union: {},
@@ -80,7 +80,7 @@ export function defaultFlow(): Graph {
       { id: 'n1', type: 'source', x: 0, y: 0, cfg: { ds: 'soft_dollar_client_report' } },
       { id: 'n2', type: 'source', x: 0, y: 0, cfg: { ds: 'security_master' } },
       { id: 'n3', type: 'join', x: 0, y: 0, cfg: { key: 'symbol', type: 'inner' } },
-      { id: 'n4', type: 'filter', x: 0, y: 0, cfg: { rules: [{ col: 'commission', op: 'gt', val: '1000' }] } },
+      { id: 'n4', type: 'filter', x: 0, y: 0, cfg: { match: 'all', rules: [{ col: 'commission', op: 'gt', val: '1000' }] } },
       { id: 'n5', type: 'select', x: 0, y: 0, cfg: { drop: ['soft_dollar_amount', 'exchange'], extras: [] } },
       { id: 's3', type: 's3', x: 0, y: 0, cfg: { client: 'acme', folder: 'commissions_reports', fmt: 'CSV' } },
     ],
@@ -98,9 +98,9 @@ export function defaultFlow(): Graph {
 export function seedRequests(): ReportRequest[] {
   const gs = [
     chain('soft_dollar_client_report', [{ type: 'select', cfg: { drop: ['soft_dollar_amount', 'net_amount'], extras: [] } }], 'acme'),
-    chain('client_positions_report', [{ type: 'filter', cfg: { rules: [{ col: 'quantity', op: 'gt', val: '5000' }] } }], 'acme'),
+    chain('client_positions_report', [{ type: 'filter', cfg: { match: 'all', rules: [{ col: 'quantity', op: 'gt', val: '5000' }] } }], 'acme'),
     chain('soft_dollar_client_report', [{ type: 'select', cfg: { drop: ['soft_dollar_amount', 'net_amount'], extras: ['strategy_id', 'realized_pnl'] } }], 'vertex'),
-    chain('commission_summary', [{ type: 'group', cfg: { by: 'desk', agg: 'sum' } }], 'smac'),
+    chain('commission_summary', [{ type: 'group', cfg: { by: ['desk'], aggs: [{ col: 'gross_commission', fn: 'sum' }, { col: 'net_commission', fn: 'sum' }] } }], 'smac'),
   ];
   return [
     { id: 'R-101', name: 'Soft-dollar commissions', client: 'acme', status: 'Approved', last: '2026-10-07', by: 'S. Ponnapalli', graph: gs[0] },

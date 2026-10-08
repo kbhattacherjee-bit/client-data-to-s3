@@ -2,21 +2,23 @@ import { useState } from 'react';
 import { clients, datasets, restricted, s3Path } from '../lib/catalog';
 import { inputOf } from '../lib/panel';
 import type { AppState } from '../lib/useApp';
-import type { Agg, ArithOp, FilterOp, NodeType } from '../lib/types';
+import type { ArithOp, NodeType } from '../lib/types';
 import { DataTable } from './DataTable';
+import { GroupEditor } from './GroupEditor';
+import { RuleEditor } from './RuleEditor';
+import { SqlPanel } from './SqlPanel';
 
 const NAMES: Record<NodeType, string> = { source: 'Source', select: 'Select columns', filter: 'Filter rows', group: 'Group by', addcol: 'Add columns', join: 'Join', union: 'Union', s3: 'Amazon S3' };
 const HELPS: Record<NodeType, string> = {
   source: 'A dataset you can access. Pick which one.',
   select: 'Hide columns you do not want the client to see.',
-  filter: 'Keep only rows that match every rule.',
-  group: 'Collapse rows into one line per value, with totals.',
+  filter: 'Keep only rows that match all of the rules, or any of them. Groups let you mix the two.',
+  group: 'Collapse rows into one line per combination of values, with the totals you choose.',
   addcol: 'Create a column from a calculation.',
   join: 'Combine two datasets by matching a shared column.',
   union: 'Stack the rows of two datasets.',
   s3: 'Where finished files are placed.',
 };
-const OPS: Record<FilterOp, string> = { gt: 'is greater than', lt: 'is less than', eq: 'equals', ne: 'does not equal', contains: 'contains' };
 const ARITH: [ArithOp, string][] = [['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷']];
 
 function Card({ on, onClick, children, left }: { on: boolean; onClick: () => void; children: React.ReactNode; left?: boolean }) {
@@ -36,7 +38,9 @@ function ColSelect({ value, cols, blank, onChange }: { value: string; cols: stri
   );
 }
 
-export function StepPanel({ app }: { app: AppState }) {
+export type PanelTab = 'step' | 'sql';
+
+export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; setTab: (t: PanelTab) => void }) {
   const { graph, T, selected, patchCfg, showToast } = app;
   const [draft, setDraft] = useState('');
   const node = graph.nodes.find((n) => n.id === selected) ?? graph.nodes.find((n) => n.type === 's3')!;
@@ -61,8 +65,16 @@ export function StepPanel({ app }: { app: AppState }) {
   const sourceDs = node.type === 'source' ? datasets[c.ds!] : null;
   const s3node = graph.nodes.find((n) => n.type === 's3')!;
 
+  const stepIssues = app.sql.ok ? [] : app.sql.issues.filter((i) => i.nodeId === node.id);
+
   return (
-    <div className="panel">
+    <div className={'panel' + (tab === 'sql' ? ' wide' : '')}>
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'step'} className={'tab' + (tab === 'step' ? ' on' : '')} onClick={() => setTab('step')}>Step</button>
+        <button role="tab" aria-selected={tab === 'sql'} className={'tab' + (tab === 'sql' ? ' on' : '')} onClick={() => setTab('sql')}>SQL</button>
+      </div>
+      {tab === 'sql' ? <SqlPanel outcome={app.sql} hint /> : <>
+      {stepIssues.length > 0 && <div className="issue-box">{stepIssues.map((i, k) => <div key={k}>{i.message}</div>)}</div>}
       <div>
         <div className="kicker">{NAMES[node.type]}</div>
         <div className="panel-title">{sourceDs ? sourceDs.name : NAMES[node.type]}</div>
@@ -124,39 +136,17 @@ export function StepPanel({ app }: { app: AppState }) {
       )}
 
       {node.type === 'filter' && (
-        <div className="stack" style={{ gap: 10 }}>
-          {c.rules!.length === 0 && <div className="empty">No rules yet. Every row passes through.</div>}
-          {c.rules!.map((r, i) => {
-            const up = (patch: Partial<typeof r>) => patchCfg(id, (cc) => ({ rules: cc.rules!.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
-            return (
-              <div key={i} className="rule">
-                <ColSelect value={r.col} cols={inCols} onChange={(col) => up({ col })} />
-                <select className="field" value={r.op} onChange={(e) => up({ op: e.target.value as FilterOp })}>
-                  {(Object.keys(OPS) as FilterOp[]).map((k) => <option key={k} value={k}>{OPS[k]}</option>)}
-                </select>
-                <div className="row">
-                  <input className="field" style={{ flex: 1, minWidth: 0 }} value={r.val} placeholder="Value" onChange={(e) => up({ val: e.target.value })} />
-                  <button className="btn sm" onClick={() => patchCfg(id, (cc) => ({ rules: cc.rules!.filter((_, j) => j !== i) }))}>Remove</button>
-                </div>
-              </div>
-            );
-          })}
-          <button className="btn dark" onClick={() => patchCfg(id, (cc) => ({ rules: cc.rules!.concat({ col: numCol, op: 'gt', val: '' }) }))}>Add a rule</button>
-        </div>
+        <RuleEditor
+          value={{ match: c.match ?? 'all', rules: c.rules ?? [] }}
+          onChange={(g) => patchCfg(id, { match: g.match, rules: g.rules })}
+          cols={inCols}
+          types={inTable?.types ?? []}
+          defaultCol={numCol}
+        />
       )}
 
       {node.type === 'group' && (
-        <div className="stack">
-          <div className="label" style={{ margin: 0 }}>Group rows by</div>
-          <ColSelect value={c.by ?? ''} cols={inCols} blank="Choose a column" onChange={(by) => patchCfg(id, { by })} />
-          <div className="label" style={{ margin: 0 }}>Combine numbers by</div>
-          <div className="cards-row">
-            {([['sum', 'Sum'], ['avg', 'Average'], ['max', 'Max']] as [Agg, string][]).map(([k, name]) => (
-              <Card key={k} on={c.agg === k} onClick={() => patchCfg(id, { agg: k })}>{name}</Card>
-            ))}
-          </div>
-          <div className="muted">Each number column becomes one total per group. A row_count column is included.</div>
-        </div>
+        <GroupEditor by={c.by ?? []} aggs={c.aggs ?? []} cols={inCols} types={inTable?.types ?? []} onChange={(g) => patchCfg(id, g)} />
       )}
 
       {node.type === 'addcol' && (
@@ -231,6 +221,7 @@ export function StepPanel({ app }: { app: AppState }) {
         <DataTable table={t} limit={4} mini />
       </div>
       {node.type !== 's3' && <button className="btn danger" onClick={() => app.delNode()}>Delete this step</button>}
+      </>}
     </div>
   );
 }

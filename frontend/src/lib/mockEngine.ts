@@ -4,8 +4,9 @@
  * evalAll() with the preview API once the backend exists; nothing else should import this file.
  * Sample rows are in the order of each dataset's visible columns.
  */
+import { arityOf } from '../../../packages/compiler/src';
 import { datasets } from './catalog';
-import type { Cell, Graph, FlowNode, Table } from './types';
+import { isGroup, type Cell, type ColType, type Graph, type FlowNode, type RuleItem, type Table } from './types';
 
 const MOCK: Record<string, Cell[][]> = {
   soft_dollar_client_report: [
@@ -80,43 +81,75 @@ export function run(n: FlowNode, inp: Input): Table {
   }
 
   if (n.type === 'filter') {
-    const rs = c.rules!.filter((r) => r.val !== '' && a.cols.includes(r.col)).map((r) => ({ ...r, i: a.cols.indexOf(r.col) }));
-    return {
-      ...a,
-      rows: a.rows.filter((row) =>
-        rs.every((r) => {
-          const raw = row[r.i];
-          const num = typeof raw === 'number';
-          const v = num ? parseFloat(r.val) : r.val.toLowerCase();
-          const x = num ? raw : String(raw).toLowerCase();
-          if (num && Number.isNaN(v)) return true;
-          switch (r.op) {
-            case 'gt': return x > v;
-            case 'lt': return x < v;
-            case 'eq': return x === v;
-            case 'ne': return x !== v;
-            default: return String(x).includes(String(v));
-          }
-        }),
-      ),
+    // Mirrors the compiler: empty-value rules are ignored, and ignoring never makes an "any" group pass everything.
+    const test = (item: RuleItem, row: Cell[]): boolean | null => {
+      if (isGroup(item)) {
+        const rs = item.rules.map((x) => test(x, row)).filter((x): x is boolean => x !== null);
+        if (!rs.length) return null;
+        return item.match === 'any' ? rs.some(Boolean) : rs.every(Boolean);
+      }
+      const i = a.cols.indexOf(item.col);
+      if (i < 0) return null;
+      const raw = row[i];
+      const kind = arityOf(item.op);
+      const blank = raw === null || raw === undefined || raw === '';
+      if (kind === 'none') return item.op === 'is_null' ? blank : !blank;
+      const val = item.val ?? '', val2 = item.val2 ?? '', list = (item.vals ?? []).filter((x) => x !== '');
+      if ((kind === 'one' && val === '') || (kind === 'list' && !list.length) || (kind === 'two' && (val === '' || val2 === ''))) return null;
+      if (blank) return false; // like SQL: comparing a missing value never matches
+      const num = typeof raw === 'number';
+      const conv = (t: string) => (num ? parseFloat(t) : t.toLowerCase());
+      const x = num ? raw : String(raw).toLowerCase();
+      const vs = (kind === 'list' ? list : kind === 'two' ? [val, val2] : [val]).map(conv);
+      if (num && vs.some((v) => Number.isNaN(v))) return null;
+      const v = vs[0]!;
+      switch (item.op) {
+        case 'eq': return x === v;
+        case 'ne': return x !== v;
+        case 'gt': return x > v;
+        case 'gte': return x >= v;
+        case 'lt': return x < v;
+        case 'lte': return x <= v;
+        case 'between': return x >= v && x <= vs[1]!;
+        case 'in': return vs.includes(x);
+        case 'not_in': return !vs.includes(x);
+        case 'contains': return String(x).includes(String(v));
+        case 'not_contains': return !String(x).includes(String(v));
+        case 'starts_with': return String(x).startsWith(String(v));
+        default: return String(x).endsWith(String(v));
+      }
     };
+    const top = { match: c.match ?? 'all', rules: c.rules ?? [] } as const;
+    return { ...a, rows: a.rows.filter((row) => test(top, row) !== false) };
   }
 
   if (n.type === 'group') {
-    const bi = a.cols.indexOf(c.by ?? '');
-    if (bi < 0) return { ...a, warn: 'Choose a column' };
-    const ni = a.cols.map((_, i) => i).filter((i) => i !== bi && a.types[i] === 'number');
-    const groups = new Map<Cell, Cell[][]>();
-    a.rows.forEach((r) => { if (!groups.has(r[bi])) groups.set(r[bi], []); groups.get(r[bi])!.push(r); });
-    const agg = c.agg ?? 'sum';
+    const by = c.by ?? [];
+    const bis = by.map((x) => a.cols.indexOf(x));
+    if (!by.length || bis.some((i) => i < 0)) return { ...a, warn: 'Choose a column' };
+    const aggs = (c.aggs ?? []).filter((x) => a.cols.includes(x.col));
+    for (const g of aggs) {
+      const t = a.types[a.cols.indexOf(g.col)];
+      const need = g.fn === 'sum' || g.fn === 'avg' ? ['number'] : g.fn === 'min' || g.fn === 'max' ? ['number', 'date', 'timestamp'] : null;
+      if (need && !need.includes(t)) return { ...a, warn: `"${g.col}" cannot be used with ${g.fn}` };
+    }
+    const groups = new Map<string, Cell[][]>();
+    a.rows.forEach((r) => { const k = JSON.stringify(bis.map((i) => r[i])); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(r); });
+    const cell = (g: (typeof aggs)[number], rs: Cell[][]): Cell => {
+      const vals = rs.map((r) => r[a.cols.indexOf(g.col)]).filter((x) => x !== null && x !== '');
+      switch (g.fn) {
+        case 'count': return vals.length;
+        case 'count_distinct': return new Set(vals).size;
+        case 'sum': return r2(vals.reduce<number>((p, q) => p + (q as number), 0));
+        case 'avg': return vals.length ? r2(vals.reduce<number>((p, q) => p + (q as number), 0) / vals.length) : null;
+        default: return vals.length ? vals.reduce((p, q) => ((g.fn === 'min' ? q! < p! : q! > p!) ? q : p)) : null;
+      }
+    };
+    const types: ColType[] = [...bis.map((i) => a.types[i]), ...aggs.map((g) => (g.fn === 'min' || g.fn === 'max' ? a.types[a.cols.indexOf(g.col)] : 'number' as const))];
     return {
-      cols: [c.by!, 'row_count'].concat(ni.map((i) => agg + '_' + a.cols[i])),
-      types: [a.types[bi], 'number' as const].concat(ni.map(() => 'number' as const)),
-      rows: [...groups].map(([k, rs]) => [k, rs.length as Cell].concat(ni.map((i) => {
-        const v = rs.map((r) => r[i] as number);
-        const total = v.reduce((p, q) => p + q, 0);
-        return agg === 'sum' ? r2(total) : agg === 'avg' ? r2(total / v.length) : Math.max(...v);
-      }))),
+      cols: [...by, ...aggs.map((g) => g.as || `${g.fn}_${g.col}`)],
+      types,
+      rows: [...groups.values()].map((rs) => [...bis.map((i) => rs[0][i]), ...aggs.map((g) => cell(g, rs))]),
     };
   }
 

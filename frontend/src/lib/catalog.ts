@@ -1,4 +1,5 @@
 import raw from '../../../catalog/catalog.json';
+import type { Catalog as CompilerCatalog } from '../../../packages/compiler/src';
 import type { ColType, Dataset } from './types';
 
 interface CatalogColumn {
@@ -26,6 +27,8 @@ interface CatalogFile {
 const catalog = raw as unknown as CatalogFile;
 
 export const schemaVersion = catalog.schema_version;
+/** The same catalog.json, typed for the SQL compiler. */
+export const compilerCatalog = raw as unknown as CompilerCatalog;
 export const models = catalog.models;
 
 const isVisible = (c: CatalogColumn) => c.selectable && !c.client_key;
