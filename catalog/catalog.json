@@ -1,0 +1,258 @@
+{
+  "schema_version": "2026.10.1",
+  "source_hash": "9fb99b23ff10",
+  "generated_at": "2026-10-08T17:30:25Z",
+  "models": [
+    {
+      "name": "soft_dollar_client_report",
+      "table": "reporting.soft_dollar_client_report",
+      "label": "Soft-dollar commissions",
+      "description": "One row per trade with the commission earned and the soft-dollar share credited to the client.",
+      "folder": "commissions_reports",
+      "reference": false,
+      "client_column": "client_id",
+      "columns": [
+        {
+          "name": "client_id",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Client the trade belongs to. Used by the server to scope every query; never shown to users.",
+          "selectable": true,
+          "format": "none",
+          "client_key": true
+        },
+        {
+          "name": "trade_date",
+          "type": "date",
+          "source_type": "date",
+          "description": "Date the trade was executed.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "symbol",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Ticker of the traded security.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "commission",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Gross commission charged on the trade, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        },
+        {
+          "name": "soft_dollar_amount",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Portion of the commission credited to the client as soft dollars, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        },
+        {
+          "name": "net_amount",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Commission after the soft-dollar credit, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        },
+        {
+          "name": "broker_notes",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Internal free-text notes from the trading desk.",
+          "selectable": false,
+          "format": "none",
+          "client_key": false
+        }
+      ]
+    },
+    {
+      "name": "client_positions_report",
+      "table": "reporting.client_positions_report",
+      "label": "Client positions",
+      "description": "End-of-day holdings per client, one row per security.",
+      "folder": "positions_reports",
+      "reference": false,
+      "client_column": "client_id",
+      "columns": [
+        {
+          "name": "client_id",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Client that holds the position. Used by the server to scope every query; never shown to users.",
+          "selectable": true,
+          "format": "none",
+          "client_key": true
+        },
+        {
+          "name": "as_of_date",
+          "type": "date",
+          "source_type": "date",
+          "description": "Business date of the snapshot.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "symbol",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Ticker of the security held.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "quantity",
+          "type": "number",
+          "source_type": "number(18,0)",
+          "description": "Number of shares or contracts held at close.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "market_value",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Value of the position at the closing price, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        }
+      ]
+    },
+    {
+      "name": "commission_summary",
+      "table": "reporting.commission_summary",
+      "label": "Commissions summary",
+      "description": "Commissions rolled up per trading desk and security, with rebates and fees.",
+      "folder": "commission_summary",
+      "reference": false,
+      "client_column": "client_id",
+      "columns": [
+        {
+          "name": "client_id",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Client the summary row belongs to. Used by the server to scope every query; never shown to users.",
+          "selectable": true,
+          "format": "none",
+          "client_key": true
+        },
+        {
+          "name": "trade_date",
+          "type": "date",
+          "source_type": "date",
+          "description": "Date the commissions were incurred.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "desk",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Trading desk that executed the trades, for example Cash or Options.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "symbol",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Ticker of the traded security.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "gross_commission",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Commission before rebates and fees, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        },
+        {
+          "name": "rebates",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Rebates returned to the client, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        },
+        {
+          "name": "fees",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Fees charged on the trades, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        },
+        {
+          "name": "net_commission",
+          "type": "number",
+          "source_type": "number(18,2)",
+          "description": "Commission after rebates and fees, in USD.",
+          "selectable": true,
+          "format": "currency",
+          "client_key": false
+        }
+      ]
+    },
+    {
+      "name": "security_master",
+      "table": "reference.security_master",
+      "label": "Security master",
+      "description": "Reference data describing each security. The same for every client.",
+      "folder": "security_master",
+      "reference": true,
+      "client_column": null,
+      "columns": [
+        {
+          "name": "symbol",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Ticker of the security. Join key to the other datasets.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "sector",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Industry sector, for example Technology or Financials.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        },
+        {
+          "name": "exchange",
+          "type": "text",
+          "source_type": "varchar",
+          "description": "Exchange the security is listed on.",
+          "selectable": true,
+          "format": "none",
+          "client_key": false
+        }
+      ]
+    }
+  ]
+}
