@@ -7,3 +7,5 @@ import type { SpringConfig } from './spring';
  */
 export const LAYOUT_SPRING: SpringConfig = { response: 0.45, damping: 0.7 };
 export const ZOOM_SPRING: SpringConfig = { response: 0.3, damping: 1 };
+/** Bottom sheet on small screens: Apple's drawer values (damping 0.8, response 0.3), a little settle after a flick. */
+export const SHEET_SPRING: SpringConfig = { response: 0.32, damping: 0.8 };

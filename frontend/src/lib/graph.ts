@@ -157,3 +157,10 @@ export function fmtCell(col: string, v: Cell): string {
   if (typeof v !== 'number') return v === null || v === undefined ? '' : String(v);
   return (isCurrency(col) ? '$' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
+
+const STEP_NAMES: Record<NodeType, string> = { source: 'Source', select: 'Select columns', filter: 'Filter rows', group: 'Group by', addcol: 'Add column', join: 'Join', union: 'Union', s3: 'Amazon S3' };
+
+/** A short, human name for a step, used in labels and screen-reader announcements. */
+export function stepName(n: FlowNode): string {
+  return n.type === 'source' && n.cfg.ds ? datasets[n.cfg.ds].name : STEP_NAMES[n.type];
+}

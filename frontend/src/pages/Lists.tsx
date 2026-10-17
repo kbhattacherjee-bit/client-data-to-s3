@@ -84,7 +84,7 @@ export function ApprovalsPage({ app }: { app: AppState }) {
                 </div>
                 <span className={'status ' + (needs ? 'warn' : 'ok')}>{needs ? 'Needs new layer' : 'Config-only'}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              <div className="actions">
                 <button className="btn" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : r.id)}>{isOpen ? 'Hide SQL' : 'Review SQL'}</button>
                 <button className="btn" onClick={() => { app.setPrevId(r.id); app.setPage('prev'); }}>Preview</button>
                 <button className="btn" onClick={() => app.setStatus(r.id, 'Rejected')}>Reject</button>

@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useMediaQuery, MOBILE_QUERY } from '../lib/useMediaQuery';
+import { useSheet } from '../lib/sheet';
 import { clients, datasets, restricted, s3Path } from '../lib/catalog';
 import { inputOf } from '../lib/panel';
+import { PORTS, reach, stepName } from '../lib/graph';
 import type { AppState } from '../lib/useApp';
-import type { ArithOp, NodeType } from '../lib/types';
+import type { ArithOp, FlowNode, NodeType } from '../lib/types';
+import { describe } from './Canvas';
 import { DataTable } from './DataTable';
 import { Icon } from './Icon';
 import { GroupEditor } from './GroupEditor';
@@ -39,11 +43,54 @@ function ColSelect({ value, cols, blank, onChange }: { value: string; cols: stri
   );
 }
 
+/** Connect and disconnect without dragging: pick what feeds each input of the selected step. */
+function Inputs({ app, node }: { app: AppState; node: FlowNode }) {
+  const ports = PORTS[node.type];
+  if (!ports.length) return null;
+  const { graph, T } = app;
+  const portName = (p: string) => (node.type === 'join' ? (p === 'a' ? 'Left input' : 'Right input') : node.type === 'union' ? (p === 'a' ? 'First input' : 'Second input') : '');
+  // a step cannot take data from something that already depends on it
+  const candidates = graph.nodes.filter((m) => m.id !== node.id && m.type !== 's3' && !reach(graph, node.id, m.id));
+  const label = (m: FlowNode) => (m.type === 'source' ? stepName(m) : `${stepName(m)} · ${describe(m, T[m.id]).title}`);
+  return (
+    <div className="stack-sm">
+      <div className="label" style={{ margin: 0 }}>{node.type === 's3' ? 'Receives data from' : 'Takes data from'}</div>
+      {ports.map(([port]) => {
+        const edge = graph.edges.find((e) => e.to === node.id && e.port === port);
+        const current = edge && graph.nodes.find((m) => m.id === edge.from);
+        const options = current && !candidates.includes(current) ? [current, ...candidates] : candidates;
+        const name = portName(port);
+        return (
+          <label key={port} className="stack-sm" style={{ gap: 4 }}>
+            {name && <span className="small faint">{name}</span>}
+            <select
+              className="field"
+              aria-label={name ? `${name}, takes data from` : 'Takes data from'}
+              value={edge?.from ?? ''}
+              onChange={(e) => (e.target.value === '' ? edge && app.removeEdge(edge) : app.connect(e.target.value, node.id, port, edge))}
+            >
+              <option value="">Not connected</option>
+              {options.map((m) => <option key={m.id} value={m.id}>{label(m)}</option>)}
+            </select>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export type PanelTab = 'step' | 'sql';
 
 export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; setTab: (t: PanelTab) => void }) {
   const { graph, T, selected, patchCfg, showToast } = app;
   const [draft, setDraft] = useState('');
+  const panelRef = useRef<HTMLElement>(null);
+  const mobile = useMediaQuery(MOBILE_QUERY);
+  const sheet = useSheet(mobile, panelRef);
+  // Like a phone sheet: choosing a step opens it, clearing the selection puts it away, and SQL needs room.
+  const { setSnap } = sheet;
+  useEffect(() => { if (mobile) setSnap(selected ? 'half' : 'peek'); }, [selected, mobile, setSnap]);
+  useEffect(() => { if (mobile && tab === 'sql') setSnap('half'); }, [tab, mobile, setSnap]);
   const picked = graph.nodes.find((n) => n.id === selected);
   const node = picked ?? graph.nodes.find((n) => n.type === 's3')!;
   const c = node.cfg;
@@ -97,6 +144,8 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
         <h2 className="t-panel" style={{ marginTop: 2 }}>{sourceDs ? sourceDs.name : NAMES[node.type]}</h2>
         <p className="muted" style={{ marginTop: 4 }}>{HELPS[node.type]}</p>
       </div>
+
+      <Inputs app={app} node={node} />
 
       {sourceDs && (
         <div className="stack">
@@ -242,8 +291,16 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
   );
 
   return (
-    <aside className="panel" aria-label="Details">
-      <div className="panel-head">
+    <aside
+      ref={panelRef}
+      className="panel"
+      aria-label="Details"
+      data-snap={mobile ? sheet.snap : undefined}
+      data-dragging={sheet.dragging || undefined}
+      style={mobile ? ({ ['--sheet-h' as string]: sheet.sheetH + 'px', ['--sheet-y' as string]: sheet.offset + 'px' }) : undefined}
+    >
+      <div className="panel-head" {...(mobile ? sheet.handlers : {})}>
+        <button className="sheet-handle" aria-label={`Resize panel, currently ${sheet.snap === 'peek' ? 'collapsed' : sheet.snap === 'half' ? 'half open' : 'fully open'}`} />
         <div className="segmented" role="tablist" data-tab={tab}>
           <button role="tab" className="seg" aria-selected={tab === 'step'} onClick={() => setTab('step')}>Step</button>
           <button role="tab" className="seg" aria-selected={tab === 'sql'} onClick={() => setTab('sql')}>SQL</button>

@@ -6,8 +6,8 @@ import { useApp, type Page } from './lib/useApp';
 import { ApprovalsPage, CatalogPage, MinePage, PreviewPage } from './pages/Lists';
 import { NewRequest, type PreviewState } from './pages/NewRequest';
 
-const NAV: [Page, string, IconName][] = [
-  ['catalog', 'Report catalog', 'layers'], ['new', 'New request', 'plus'], ['mine', 'My requests', 'list'], ['appr', 'Approvals', 'approve'], ['prev', 'Preview data', 'table'],
+const NAV: [Page, string, IconName, string][] = [
+  ['catalog', 'Report catalog', 'layers', 'Catalog'], ['new', 'New request', 'plus', 'New'], ['mine', 'My requests', 'list', 'Requests'], ['appr', 'Approvals', 'approve', 'Approvals'], ['prev', 'Preview data', 'table', 'Preview'],
 ];
 
 const TITLES: Record<Page, [string, string]> = {
@@ -47,10 +47,10 @@ export function App() {
       </header>
       <div className="body">
         <nav className="nav" aria-label="Main">
-          {NAV.map(([k, label, icon]) => (
+          {NAV.map(([k, label, icon, short]) => (
             <button key={k} className={'nav-item' + (page === k ? ' on' : '')} aria-current={page === k ? 'page' : undefined} onClick={() => app.setPage(k)}>
               <Icon name={icon} size={16} />
-              <span className="grow">{label}</span>
+              <span className="grow"><span className="long">{label}</span><span className="short">{short}</span></span>
               {k === 'appr' && pending > 0 && <span className="badge" aria-label={`${pending} waiting`}>{pending}</span>}
             </button>
           ))}
@@ -73,7 +73,8 @@ export function App() {
           {page === 'prev' && <PreviewPage app={app} />}
         </main>
       </div>
-      <Toast text={app.toast} />
+      <Toast toast={app.toast} />
+      <div className="sr-only" role="status" aria-live="polite" key={app.announcement.n}>{app.announcement.text}</div>
     </div>
   );
 }

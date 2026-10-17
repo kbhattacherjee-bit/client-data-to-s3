@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { clients, datasets } from '../lib/catalog';
-import { NODE_H, NODE_W, PORTS } from '../lib/graph';
+import { NODE_H, NODE_W, PORTS, stepName } from '../lib/graph';
 import type { AppState } from '../lib/useApp';
 import { isGroup, type Edge, type FlowNode, type NodeType, type Port, type RuleItem, type Table } from '../lib/types';
 import { Icon, type IconName } from './Icon';
@@ -19,7 +19,7 @@ export const NODE_ICON: Record<NodeType, IconName> = {
 };
 const OPS = { '+': '+', '-': '−', '*': '×', '/': '÷' } as const;
 
-function describe(n: FlowNode, t: Table): { kicker: string; title: string; sub: string; warn: boolean } {
+export function describe(n: FlowNode, t: Table): { kicker: string; title: string; sub: string; warn: boolean } {
   const c = n.cfg;
   let warn = !!t.warn; // an unconnected step is incomplete, not wrong: the empty port already says so
   let kicker = '', title = '', sub = '';
@@ -64,9 +64,9 @@ const portTitle = (type: NodeType, p: Port) => ({ in: 'Input', a: type === 'join
 export function Canvas({ app }: { app: AppState }) {
   const { graph, T, zoom, selected } = app;
   const canvasRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const drag = useRef<{ id: string; dx: number; dy: number; sx: number; sy: number; pid: number; started: boolean; touch: boolean } | null>(null);
   /** `replacing` is set while an existing arrow is being moved: it is hidden until dropped on an input, and kept if dropped elsewhere. */
-  const link = useRef<{ from: string; replacing?: Edge } | null>(null);
+  const link = useRef<{ from: string; replacing?: Edge; pid: number } | null>(null);
   const [moving, setMoving] = useState<Edge | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [linkPos, setLinkPos] = useState<[number, number] | null>(null);
@@ -90,22 +90,91 @@ export function Canvas({ app }: { app: AppState }) {
     return [(e.clientX - r.left) / live.current.zoom, (e.clientY - r.top) / live.current.zoom];
   };
 
+  /** Where a dragged arrow was dropped: an input dot, or anywhere on a card (which takes its first free input). */
+  const dropTarget = (e: PointerEvent): { node: string; port: Port } | null => {
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    const dot = hit?.closest<HTMLElement>('[data-port-in]');
+    if (dot) return { node: dot.dataset.node!, port: dot.dataset.port as Port };
+    const card = hit?.closest<HTMLElement>('.node[data-id]');
+    const n = card && live.current.graph.nodes.find((x) => x.id === card.dataset.id);
+    if (!n || !PORTS[n.type].length) return null;
+    const free = PORTS[n.type].find(([p]) => !live.current.graph.edges.some((x) => x.to === n.id && x.port === p));
+    return { node: n.id, port: (free ?? PORTS[n.type][0]!)[0] };
+  };
+
   useEffect(() => {
-    const move = (e: MouseEvent) => {
+    const move = (e: PointerEvent) => {
       if (!canvasRef.current) return;
-      const [mx, my] = toCanvas(e);
-      if (drag.current) live.current.moveNode(drag.current.id, Math.max(0, mx - drag.current.dx), Math.max(0, my - drag.current.dy));
-      else if (link.current) setLinkPos([mx, my]);
+      const d = drag.current;
+      if (d && e.pointerId === d.pid) {
+        // a finger needs a few pixels of travel before a tap turns into a drag
+        if (!d.started) {
+          if (d.touch && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return;
+          d.started = true;
+          setDragging(d.id);
+        }
+        const [mx, my] = toCanvas(e);
+        live.current.moveNode(d.id, Math.max(0, mx - d.dx), Math.max(0, my - d.dy));
+      } else if (link.current && e.pointerId === link.current.pid) setLinkPos(toCanvas(e));
     };
-    const up = () => {
-      drag.current = null;
-      setDragging(null);
-      if (link.current) { link.current = null; setLinkPos(null); setMoving(null); }
+    const end = (e: PointerEvent, cancelled: boolean) => {
+      if (drag.current && e.pointerId === drag.current.pid) { drag.current = null; setDragging(null); }
+      const l = link.current;
+      if (l && e.pointerId === l.pid) {
+        const t = cancelled ? null : dropTarget(e);
+        if (t) live.current.connect(l.from, t.node, t.port, l.replacing);
+        link.current = null; setLinkPos(null); setMoving(null);
+      }
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    const up = (e: PointerEvent) => end(e, false);
+    const cancel = (e: PointerEvent) => end(e, true);
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && link.current) { link.current = null; setLinkPos(null); setMoving(null); } };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancel); window.removeEventListener('keydown', esc); };
   }, []);
+
+  // Pinch to zoom: two touches on the background scale the canvas 1:1 with the fingers.
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d0: number; z0: number } | null>(null);
+  const spread = () => { const [a, b] = [...touches.current.values()]; return Math.hypot(a!.x - b!.x, a!.y - b!.y); };
+  const onScrollPointerDown = (e: React.PointerEvent) => {
+    if (!(e.target as HTMLElement).closest('.node, .port, .edge-x')) app.setSelected('');
+    if (e.pointerType !== 'touch') return;
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.current.size === 2) pinch.current = { d0: spread(), z0: live.current.zoom };
+  };
+  const onScrollPointerMove = (e: React.PointerEvent) => {
+    if (!touches.current.has(e.pointerId)) return;
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current && touches.current.size === 2) live.current.zoomNow((pinch.current.z0 * spread()) / pinch.current.d0);
+  };
+  const onScrollPointerEnd = (e: React.PointerEvent) => {
+    touches.current.delete(e.pointerId);
+    if (touches.current.size < 2) pinch.current = null;
+  };
+
+  const focusStep = (id: string | undefined) => id && canvasRef.current?.querySelector<HTMLElement>(`[data-id="${id}"] .node-body`)?.focus();
+  /** Arrow keys follow the flow: right to what a step feeds, left to what feeds it, up and down within a column. */
+  const neighbour = (n: FlowNode, key: string) => {
+    if (key === 'ArrowRight') return graph.edges.find((e) => e.from === n.id)?.to;
+    if (key === 'ArrowLeft') return graph.edges.find((e) => e.to === n.id)?.from;
+    const col = graph.nodes.filter((m) => Math.abs(m.x - n.x) < 60).sort((p, q) => p.y - q.y);
+    return col[col.findIndex((m) => m.id === n.id) + (key === 'ArrowDown' ? 1 : -1)]?.id;
+  };
+  const onNodeKey = (e: React.KeyboardEvent, n: FlowNode) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); app.setSelected(n.id); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && n.type !== 's3') { e.preventDefault(); app.delNode(n.id); return; }
+    if (e.key.startsWith('Arrow')) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        const step = 16;
+        app.moveNode(n.id, Math.max(0, n.x + (e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0)), Math.max(0, n.y + (e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0)));
+      } else focusStep(neighbour(n, e.key));
+    }
+  };
 
   const byId = (id: string) => graph.nodes.find((n) => n.id === id)!;
   const cw = Math.max(900, ...graph.nodes.map((n) => n.x + NODE_W + 60));
@@ -125,7 +194,20 @@ export function Canvas({ app }: { app: AppState }) {
   const hoverOff = () => { window.clearTimeout(leaveTimer.current); leaveTimer.current = window.setTimeout(() => setHoverEdge(null), 140); };
 
   return (
-    <div className="canvas-scroll" onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('.node, .port, .edge-x')) app.setSelected(''); }}>
+    <div
+      className="canvas-scroll"
+      role="region"
+      aria-label="Report canvas"
+      aria-describedby="canvas-help"
+      onPointerDown={onScrollPointerDown}
+      onPointerMove={onScrollPointerMove}
+      onPointerUp={onScrollPointerEnd}
+      onPointerCancel={onScrollPointerEnd}
+    >
+      <p id="canvas-help" className="sr-only">
+        Tab moves between steps. Arrow keys jump to a connected step. Shift and an arrow key move the step. Delete removes it.
+        To connect steps without dragging, use the Takes data from setting in the side panel.
+      </p>
       <div style={{ width: cw * zoom, height: ch * zoom }}>
         <div
           ref={canvasRef}
@@ -165,6 +247,7 @@ export function Canvas({ app }: { app: AppState }) {
                 className={'edge-x' + (showEdgeControl(e) ? ' show' : '')}
                 title="Remove connection"
                 aria-label="Remove connection"
+                tabIndex={-1}
                 style={{ left: (A[0] + B[0]) / 2, top: (A[1] + B[1]) / 2 }}
                 onMouseEnter={() => hoverOn(e)}
                 onMouseLeave={hoverOff}
@@ -185,24 +268,34 @@ export function Canvas({ app }: { app: AppState }) {
                 data-id={n.id}
                 className={'node' + (n.type === 'source' ? ' source' : '') + (n.type === 's3' ? ' output' : '') + (on ? ' on' : '') + (dragging === n.id ? ' dragging' : '')}
                 style={{ left: n.x, top: n.y }}
-                onMouseDown={(e) => {
+                onPointerDown={(e) => {
+                  if (e.pointerType === 'mouse' && e.button !== 0) return;
+                  e.currentTarget.setPointerCapture(e.pointerId);
                   const [mx, my] = toCanvas(e);
-                  drag.current = { id: n.id, dx: mx - n.x, dy: my - n.y };
-                  setDragging(n.id);
+                  drag.current = { id: n.id, dx: mx - n.x, dy: my - n.y, sx: e.clientX, sy: e.clientY, pid: e.pointerId, started: false, touch: e.pointerType !== 'mouse' };
+                  if (e.pointerType === 'mouse') { drag.current.started = true; setDragging(n.id); }
                   app.setSelected(n.id);
                 }}
                 onMouseEnter={() => setHover(n.id)}
                 onMouseLeave={() => setHover(null)}
               >
-                <div className="node-head">
-                  <span className="node-icon"><Icon name={NODE_ICON[n.type]} size={14} /></span>
-                  <span className="node-kicker">{d.kicker}</span>
-                  {d.warn && <span className="node-warn" title="Needs attention"><Icon name="alert" size={14} /></span>}
-                </div>
-                <div className="node-title">{d.title}</div>
-                <div className="node-sub">{d.sub}</div>
+                <button
+                  className="node-body"
+                  aria-label={`${stepName(n)}. ${d.title}. ${d.sub}.${on ? ' Selected.' : ''}${d.warn ? ' Needs attention.' : ''}`}
+                  aria-pressed={on}
+                  onKeyDown={(e) => onNodeKey(e, n)}
+                  onFocus={() => app.setSelected(n.id)}
+                >
+                  <span className="node-head">
+                    <span className="node-icon"><Icon name={NODE_ICON[n.type]} size={14} /></span>
+                    <span className="node-kicker">{d.kicker}</span>
+                    {d.warn && <span className="node-warn" title="Needs attention"><Icon name="alert" size={14} /></span>}
+                  </span>
+                  <span className="node-title">{d.title}</span>
+                  <span className="node-sub">{d.sub}</span>
+                </button>
                 {n.type !== 's3' && (hover === n.id || on) && (
-                  <button className="node-del" title="Delete this step" aria-label="Delete this step" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); app.delNode(n.id); }}>
+                  <button className="node-del" title="Delete this step" aria-label="Delete this step" tabIndex={-1} onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); app.delNode(n.id); }}>
                     <Icon name="x" size={12} />
                   </button>
                 )}
@@ -213,18 +306,22 @@ export function Canvas({ app }: { app: AppState }) {
                     <button
                       key={p}
                       className={'port' + (edge ? ' filled movable' : '')}
+                      data-port-in="1"
+                      data-node={n.id}
+                      data-port={p}
                       title={label}
                       aria-label={label}
+                      tabIndex={-1}
                       style={{ left: -12, top: NODE_H * f - 12 }}
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.stopPropagation();
-                        if (!edge) return;
+                        if (!edge || (e.pointerType === 'mouse' && e.button !== 0)) return;
                         e.preventDefault();
-                        link.current = { from: edge.from, replacing: edge };
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        link.current = { from: edge.from, replacing: edge, pid: e.pointerId };
                         setMoving(edge);
                         setLinkPos(toCanvas(e));
                       }}
-                      onMouseUp={() => { if (link.current) app.connect(link.current.from, n.id, p, link.current.replacing); }}
                     />
                   );
                 })}
@@ -233,8 +330,16 @@ export function Canvas({ app }: { app: AppState }) {
                     className="port out"
                     title="Drag to connect"
                     aria-label="Drag to connect"
+                    tabIndex={-1}
                     style={{ left: NODE_W - 12, top: NODE_H / 2 - 12 }}
-                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); link.current = { from: n.id }; }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      if (e.pointerType === 'mouse' && e.button !== 0) return;
+                      e.preventDefault();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      link.current = { from: n.id, pid: e.pointerId };
+                      setLinkPos(toCanvas(e));
+                    }}
                   />
                 )}
               </div>

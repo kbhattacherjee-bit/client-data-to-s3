@@ -135,7 +135,7 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 .link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---- status chips: shape + word, never colour alone ---- */
-.status { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 500; background: var(--fill); color: var(--ink-2); }
+.status { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 500; background: var(--fill); color: var(--ink-2); }
 .status::before { content: ''; width: 6px; height: 6px; border-radius: var(--r-pill); background: currentColor; opacity: .85; }
 .status.ok { background: var(--ok-bg); color: var(--ok-ink); }
 .status.warn { background: var(--warn-bg); color: var(--warn-ink); }
@@ -146,7 +146,7 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 .builder { flex: 1; min-height: 520px; display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-1); }
 .stage { position: relative; flex: 1; min-width: 0; }
 .canvas-scroll {
-  position: absolute; inset: 0; overflow: auto; background-color: var(--page);
+  position: absolute; inset: 0; overflow: auto; touch-action: pan-x pan-y; background-color: var(--page);
   background-image: radial-gradient(rgba(13, 17, 29, .13) 1px, transparent 1px); background-size: 22px 22px;
   padding: 116px 24px 96px 0; scroll-padding: 24px;
 }
@@ -191,9 +191,8 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 
 /* ---- nodes and arrows ---- */
 .node {
-  position: absolute; width: 216px; height: 84px; padding: 11px 14px; border-radius: 12px; cursor: grab; user-select: none; touch-action: none;
+  position: absolute; width: 216px; height: 84px; border-radius: 12px; cursor: grab; user-select: none; touch-action: none;
   background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-1);
-  display: flex; flex-direction: column; justify-content: center; gap: 1px;
   /* a card let go of settles back with a small spring, not a plain ease */
   transition: box-shadow var(--t-base) var(--ease), transform 460ms var(--spring-settle), border-color var(--t-base) var(--ease);
   animation: node-in var(--t-slow) var(--ease) backwards;
@@ -207,13 +206,16 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 .node.output .node-kicker, .node.output .node-sub { color: rgba(255, 255, 255, .78); }
 .node.output .node-icon { background: rgba(255, 255, 255, .16); color: #fff; }
 .node.output.on { box-shadow: 0 0 0 2px var(--bb-deep), 0 0 0 4px var(--bb-tint), var(--shadow-2); }
-.node-head { display: flex; align-items: center; gap: 8px; }
+.node-body { position: absolute; inset: 0; width: 100%; padding: 11px 14px; border: 0; border-radius: inherit; background: transparent; color: inherit; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 1px; cursor: inherit; }
+.node-body:focus-visible { box-shadow: 0 0 0 3px rgba(46, 33, 222, .35); }
+.node.output .node-body:focus-visible { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--bb-deep); }
+.node-head { display: flex; align-items: center; gap: 8px; width: 100%; }
 .node-icon { width: 22px; height: 22px; border-radius: var(--r-sm); display: grid; place-items: center; background: var(--fill); color: var(--ink-2); flex: none; }
 .node.source .node-icon { background: var(--surface); color: var(--bb); }
 .node-kicker { font-size: 12px; font-weight: 500; color: var(--ink-3); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .node-warn { color: var(--warn); flex: none; }
-.node-title { font-size: 14px; font-weight: 600; letter-spacing: -.005em; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-sub { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.node-title { display: block; width: 100%; font-size: 14px; font-weight: 600; letter-spacing: -.005em; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node-sub { display: block; width: 100%; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .node-del {
   position: absolute; right: -9px; top: -9px; width: 22px; height: 22px; padding: 0; border-radius: var(--r-pill); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
   display: grid; place-items: center; box-shadow: var(--shadow-2); opacity: 0; transform: scale(.8); transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease), color var(--t-fast);
@@ -222,7 +224,7 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 .node-del:hover { color: var(--bad); border-color: var(--bad); }
 
 /* 24px hit area around a 10px dot, so ports are easy to grab */
-.port { position: absolute; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; cursor: crosshair; }
+.port { position: absolute; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; cursor: crosshair; touch-action: none; }
 .port::after {
   content: ''; width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--surface); border: 2px solid var(--bb);
   transition: transform var(--t-fast) var(--ease), background var(--t-fast);
@@ -357,3 +359,108 @@ tr.click:hover td { background: var(--bb-wash); }
 }
 .edge-x:focus-visible { opacity: 1; transform: none; pointer-events: auto; box-shadow: var(--focus); }
 .result { border-top: 1px solid var(--line); padding-top: 16px; }
+
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast-action { border: 0; background: none; padding: 0; color: #B8B2FF; font-weight: 600; }
+.toast-action:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.shortcut { display: flex; align-items: center; gap: 14px; }
+.shortcut kbd { min-width: 150px; font-family: var(--mono); font-size: 12px; background: var(--fill); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: var(--r-sm); padding: 3px 8px; white-space: nowrap; }
+
+.nav-item .short { display: none; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.sheet-handle { display: none; }
+:root { --sheet-peek: 112px; }
+
+/* ================= small screens ================= */
+@media (max-width: 900px) {
+  .shell { height: 100dvh; }
+  .topbar { padding: 0 16px; }
+  .brand-sep, .brand-sub, .chip-info { display: none; }
+  .body { flex-direction: column; gap: 0; padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); }
+
+  /* tab bar, as on a phone */
+  .nav {
+    position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; width: auto; flex-direction: row; justify-content: space-around; gap: 0;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: var(--glass); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-top: 1px solid var(--glass-line);
+  }
+  .nav-item { flex: 1; flex-direction: column; justify-content: center; gap: 2px; height: 52px; padding: 4px 0; border-radius: 12px; font-size: 11px; }
+  .nav-item .grow { flex: none; }
+  .nav-item .long { display: none; }
+  .nav-item .short { display: inline; }
+  .badge { position: absolute; top: 3px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px; font-size: 10px; }
+
+  .page-head { position: relative; flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 10px; }
+  .page-sub { display: none; }
+  .t-title { font-size: 20px; }
+  .head-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .head-actions .status { position: absolute; top: 0; right: 0; }
+
+  /* the canvas fills the screen; the panel becomes a bottom sheet over it */
+  .builder { display: block; position: relative; flex: 1; min-height: 0; }
+  .stage { position: absolute; inset: 0; }
+  .panel {
+    position: absolute; z-index: 18; left: 0; right: 0; bottom: 0; width: auto; height: var(--sheet-h, 70%);
+    border-left: 0; border-radius: 16px 16px 0 0; box-shadow: var(--shadow-4);
+    transform: translateY(var(--sheet-y, 0px)); will-change: transform;
+  }
+  .panel-head { touch-action: none; padding: 0 16px 8px; cursor: grab; }
+  .panel[data-dragging] .panel-head { cursor: grabbing; }
+  .sheet-handle { display: block; width: 100%; height: 28px; border: 0; background: transparent; position: relative; padding: 0; }
+  .sheet-handle::before { content: ''; position: absolute; left: 50%; top: 10px; width: 36px; height: 5px; margin-left: -18px; border-radius: var(--r-pill); background: var(--line-2); }
+  .panel[data-snap='peek'] .panel-body { pointer-events: none; overflow: hidden; }
+  .panel-body { padding: 14px 16px calc(24px + env(safe-area-inset-bottom)); }
+
+  /* sources then steps in one row that scrolls sideways */
+  .float-top { top: 8px; left: 8px; right: 8px; padding: 8px; border-radius: 12px; flex-direction: row; gap: 14px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; touch-action: pan-x; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .float-top::-webkit-scrollbar { display: none; }
+  .palette-label { display: none; }
+  .palette-row { flex: none; align-items: center; }
+  .chips { flex-wrap: nowrap; }
+  .chip { flex: none; }
+  .canvas-scroll { padding: 72px 16px calc(var(--sheet-peek) + 84px) 0; }
+  /* the controls ride on the sheet's top edge (transform only, so it stays smooth while dragging) */
+  .float-row { left: 8px; right: 8px; bottom: calc(var(--sheet-peek) + 10px); flex-direction: column; align-items: stretch; gap: 8px; transform: translateY(calc(var(--sheet-peek) - var(--sheet-visible, var(--sheet-peek)))); transition: opacity var(--t-base) var(--ease); }
+  .builder[data-sheet='full'] .float-row { opacity: 0; pointer-events: none; }
+  .float-status { max-width: none; padding: 8px 12px; }
+  .float-status > div { min-width: 0; }
+  .float-status > div > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .float-status .line2 { display: none; }
+  .float-status.idle { display: none; }
+  .float-view { align-self: flex-end; }
+  .empty { top: 214px; }
+  .empty-card .drag-hint { display: none; }
+  .head-actions .btn { height: 40px; }
+  .empty-card { padding: 8px 20px; }
+  .empty-card .chips { display: none; } /* the row at the top already lists them */
+
+  .overlay { padding: 12px; align-items: flex-end; }
+  .modal { width: 100%; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom) + 12px); max-width: calc(100% - 24px); }
+
+  .card.split { flex-direction: column; align-items: stretch; }
+  .actions { flex-wrap: wrap; justify-content: stretch; }
+  .actions .btn { flex: 1; }
+  .col-narrow { max-width: none !important; }
+  .field { font-size: 16px; } /* 16px stops iOS from zooming into a focused field */
+}
+@media (max-width: 600px) {
+  .float-view .lbl { display: none; }
+  .float-view .btn.sm { padding: 0; width: 36px; }
+}
+
+/* touch-sized targets wherever the main pointer is a finger */
+@media (pointer: coarse) {
+  .btn { height: 44px; }
+  .btn.sm { height: 40px; }
+  .btn.icon { width: 40px; }
+  .chip, .toggle { height: 40px; }
+  .field { height: 44px; }
+  .seg { height: 36px; }
+  .nav-item { min-height: 44px; }
+  .port { width: 44px; height: 44px; margin: -10px; }
+  .node-del { width: 32px; height: 32px; right: -14px; top: -14px; }
+  .edge-x { width: 32px; height: 32px; margin: -16px 0 0 -16px; }
+}
+.node.source .node-kicker, .node.source .node-sub { color: var(--ink-2); }

@@ -30,16 +30,19 @@ export class SpringSet {
     private readonly epsilonFor: (key: string) => number = (k) => (k === 'zoom' ? 0.0008 : 0.05),
   ) {}
 
-  /** Move keys toward new targets. Unknown keys start from `current` (or the target itself). */
-  retarget(targets: Record<string, number>, current: Record<string, number> = {}) {
+  /**
+   * Move keys toward new targets. Unknown keys start from `current` (or the target itself).
+   * `velocity` (units per second) is the speed to start with, e.g. the release speed of a drag.
+   */
+  retarget(targets: Record<string, number>, current: Record<string, number> = {}, velocity: Record<string, number> = {}) {
     if (reduced()) {
       this.jump(targets);
       return;
     }
     for (const [k, t] of Object.entries(targets)) {
       const a = this.axes.get(k);
-      if (a) a.target = t;
-      else this.axes.set(k, { x: current[k] ?? t, v: 0, target: t });
+      if (a) { a.target = t; if (velocity[k] !== undefined) a.v = velocity[k]!; }
+      else this.axes.set(k, { x: current[k] ?? t, v: velocity[k] ?? 0, target: t });
     }
     this.start();
   }

@@ -96,3 +96,26 @@
   (movement is dropped, opacity changes stay); `prefers-reduced-transparency` and `prefers-contrast: more` are handled.
 - Node cards are 216px wide (was 184px) so names are no longer truncated; columns are 252px apart.
 - Still open from SPEC 12: a keyboard and non-drag way to connect steps; dark mode; mobile.
+
+## 2026-10-09: Keyboard, non-drag editing and small screens (SPEC 12 accessibility; dark mode deferred)
+
+- **DECIDED (by the user):** keep Blueberry `#2E21DE`; keep the header without the Clear Street logo; try bouncier springs
+  (kept in its own commit, `a2a863f`, so it can be reverted alone; the knobs are `LAYOUT_SPRING` in `lib/motion.ts` and
+  `--spring-settle` in `styles.css`). Dark mode comes later.
+- No drag is ever required. "Takes data from" in the side panel connects, re-points and disconnects any step (loops are not
+  offered). Cards are real buttons: Tab moves between them, arrow keys follow the flow (right: what it feeds, left: what feeds
+  it, up and down within a column), Shift and arrows nudge a card, Delete removes it with an Undo toast, Enter selects.
+  Actions are announced through an `aria-live` region. A keyboard help dialog lists all of it.
+- Dragging an arrow onto the body of a card (not just its dot) connects to that card's first free input.
+- Pointer events replace mouse events, so touch works: a finger needs about 6px of travel before a tap becomes a drag,
+  pinching the canvas zooms 1:1, and ports and buttons grow to 44px on coarse pointers.
+- Tidy up now also eases the zoom out (down to 30%) so the whole flow is in view.
+- Small screens (up to 900px): the nav becomes a bottom tab bar; the side panel becomes a bottom sheet with three heights
+  (peek, half, full). It follows the finger 1:1, rubber-bands past its ends, and on release projects the flick forward,
+  snaps to the nearest height and hands the release speed to a spring (`lib/sheet.ts`). The zoom and Tidy controls ride on
+  its top edge. Choosing a step opens it; clearing the selection puts it away.
+- Checked with axe (WCAG 2.1 AA plus best practice) on blank, flow, SQL, catalog, approvals and requests views at desktop
+  and iPhone sizes: no violations. Touch, pinch, sheet and keyboard flows were driven with synthetic touch and key events.
+  These checks live outside the repo for now; they could become Playwright tests if wanted.
+- Still open: dark mode; a real-device pass on iOS and Android; pinch is not anchored to the fingers' midpoint (zooms about
+  the top-left of the canvas).

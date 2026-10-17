@@ -3,12 +3,13 @@ import { LAYOUT_SPRING, ZOOM_SPRING } from './motion';
 import { SpringSet } from './spring';
 import { datasets } from './catalog';
 import { compileFlow, firstBlocking } from './sql';
-import { analyse, blankFlow, chain, cleanGraph, defCfg, layout, PORTS, reach, seedRequests } from './graph';
+import { analyse, blankFlow, chain, cleanGraph, defCfg, layout, NODE_H, NODE_W, PORTS, reach, seedRequests, stepName } from './graph';
 import type { Cfg, Edge, FlowNode, Graph, NodeType, Port, ReportRequest, RequestStatus } from './types';
 
 export type Page = 'catalog' | 'new' | 'mine' | 'appr' | 'prev';
+export interface ToastMessage { text: string; action?: { label: string; run: () => void } }
 
-export const MIN_ZOOM = 0.4;
+export const MIN_ZOOM = 0.3;
 export const MAX_ZOOM = 1.6;
 
 /**
@@ -23,16 +24,20 @@ export function useApp() {
   const [zoom, setZoom] = useState(1);
   const [requests, setRequests] = useState<ReportRequest[]>(seedRequests);
   const [prevId, setPrevId] = useState('R-101');
-  const [toast, setToastText] = useState('');
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [announcement, setAnnouncement] = useState({ text: '', n: 0 });
   const nextId = useRef(10);
   const reqN = useRef(105);
   const toastTimer = useRef<number>();
 
-  const showToast = useCallback((t: string) => {
-    setToastText(t);
+  /** A short message at the bottom of the screen. With an action (such as Undo) it stays a little longer. */
+  const showToast = useCallback((text: string, action?: ToastMessage['action']) => {
+    setToast({ text, action });
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToastText(''), 3200);
+    toastTimer.current = window.setTimeout(() => setToast(null), action ? 7000 : 3200);
   }, []);
+  /** Tells screen-reader users what just happened (shown nowhere, read aloud politely). */
+  const announce = useCallback((text: string) => setAnnouncement((a) => ({ text, n: a.n + 1 })), []);
 
   // Layout changes and zoom glide on critically damped springs (no overshoot, interruptible, velocity carries over).
   const graphRef = useRef(graph);
@@ -86,6 +91,11 @@ export function useApp() {
     zoomSpring.current!.retarget({ zoom: zoomTarget.current }, { zoom: zoomRef.current });
   }, []);
   const zoomBy = useCallback((d: number) => zoomTo(zoomTarget.current + d), [zoomTo]);
+  /** Follows a pinch gesture 1:1, with no spring in between. */
+  const zoomNow = useCallback((t: number) => {
+    zoomTarget.current = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, t));
+    zoomSpring.current!.jump({ zoom: zoomTarget.current });
+  }, []);
 
   const patchCfg = (id: string, patch: Cfg | ((c: Cfg) => Cfg)) =>
     setGraph((g) => ({
@@ -130,6 +140,7 @@ export function useApp() {
     if (pos) setGraph(g);
     else commit(layout(g));
     setSelected(id);
+    announce(`Added ${stepName(node)}${anchor && !pos && type !== 'source' ? ` after ${stepName(anchor)}` : ''}.`);
   };
 
   /** Deletes a step and re-wires its first upstream step to everything it fed. */
@@ -141,8 +152,14 @@ export function useApp() {
     const up = ins[0]?.from;
     let edges = graph.edges.filter((e) => e.to !== n.id && e.from !== n.id);
     if (up) edges = edges.concat(outs.map((e) => ({ ...e, from: up })));
+    const before = { graph: graphRef.current, selected };
     commit(layout({ nodes: graph.nodes.filter((x) => x.id !== n.id), edges }));
     setSelected(up || '');
+    announce(`Deleted ${stepName(n)}.`);
+    showToast(`Deleted ${stepName(n)}`, {
+      label: 'Undo',
+      run: () => { commit(before.graph); setSelected(before.selected); announce(`Restored ${stepName(n)}.`); setToast(null); },
+    });
   };
 
   /** Connects `from` to an input. With `replacing`, that arrow is moved instead of a new one added. */
@@ -154,14 +171,33 @@ export function useApp() {
       return;
     }
     setGraph((g) => ({ ...g, edges: g.edges.filter((e) => e !== replacing && !(e.to === to && e.port === port)).concat({ from, to, port }) }));
+    const a = graph.nodes.find((x) => x.id === from);
+    const b = graph.nodes.find((x) => x.id === to);
+    if (a && b) announce(`Connected ${stepName(a)} to ${stepName(b)}.`);
   };
 
-  const removeEdge = (e: Edge) => setGraph((g) => ({ ...g, edges: g.edges.filter((q) => q !== e) }));
-  const tidy = () => commit(layout(cleanGraph(graphRef.current.nodes, graphRef.current.edges)));
+  const removeEdge = (e: Edge) => {
+    setGraph((g) => ({ ...g, edges: g.edges.filter((q) => q !== e) }));
+    const a = graph.nodes.find((x) => x.id === e.from);
+    const b = graph.nodes.find((x) => x.id === e.to);
+    if (a && b) announce(`Disconnected ${stepName(a)} from ${stepName(b)}.`);
+  };
+  /** Arranges the steps and, given the visible size, eases the zoom out just enough to show the whole flow. */
+  const tidy = (viewport?: { w: number; h: number }) => {
+    const g = layout(cleanGraph(graphRef.current.nodes, graphRef.current.edges));
+    commit(g);
+    announce('Steps arranged.');
+    if (viewport) {
+      const w = Math.max(...g.nodes.map((n) => n.x + NODE_W)) + 24;
+      const h = Math.max(...g.nodes.map((n) => n.y + NODE_H)) + 24;
+      zoomTo(Math.max(MIN_ZOOM, Math.floor(Math.min(1, (viewport.w - 24) / w, (viewport.h - 212) / h) * 100) / 100));
+    }
+  };
   const resetFlow = () => {
     stopNodeMotion();
     setGraph(blankFlow());
     setSelected('');
+    announce('Canvas cleared.');
   };
 
   const loadGraph = (g: Graph, sel: string) => {
@@ -204,7 +240,7 @@ export function useApp() {
   live.current = { page, delNode, zoomBy, zoomTo };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { page: p, delNode: del, zoomBy: zb, zoomTo: zt } = live.current;
+      const { page: p, zoomBy: zb, zoomTo: zt } = live.current;
       if (p !== 'new') return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') { e.preventDefault(); zb(0.1); }
@@ -212,8 +248,6 @@ export function useApp() {
         else if (e.key === '0') { e.preventDefault(); zt(1); }
         return;
       }
-      const tag = document.activeElement?.tagName ?? '';
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !/INPUT|SELECT|TEXTAREA/.test(tag)) del();
     };
     const onWheel = (e: WheelEvent) => {
       if ((e.ctrlKey || e.metaKey) && live.current.page === 'new') {
@@ -230,8 +264,8 @@ export function useApp() {
   }, []);
 
   return {
-    page, setPage, graph: view, T, st, sql, selected, setSelected, zoom, zoomTo, zoomBy,
-    requests, prevId, setPrevId, toast, showToast,
+    page, setPage, graph: view, T, st, sql, selected, setSelected, zoom, zoomTo, zoomBy, zoomNow,
+    requests, prevId, setPrevId, toast, showToast, announcement,
     patchCfg, moveNode, addFn, delNode, connect, removeEdge, tidy, resetFlow, loadGraph, startWith, submit, setStatus,
   };
 }
