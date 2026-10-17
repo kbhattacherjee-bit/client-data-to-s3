@@ -119,3 +119,10 @@
   These checks live outside the repo for now; they could become Playwright tests if wanted.
 - Still open: dark mode; a real-device pass on iOS and Android; pinch is not anchored to the fingers' midpoint (zooms about
   the top-left of the canvas).
+
+## 2026-10-09: Arrow readability
+
+- Cards are 76px apart (was 36px), so arrows are long enough to read. The remove cross sits above its arrow instead of on it,
+  so the shaft and arrowhead stay visible, and it keeps a constant on-screen size (20px, 32px on touch) at any zoom.
+  Delete badges and ports also stop shrinking when zoomed out. On phones the zoom and Tidy controls sit under the palette
+  and the "Ready" status is dropped there (the header chip says it); problems still appear.

@@ -217,14 +217,14 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 .node-title { display: block; width: 100%; font-size: 14px; font-weight: 600; letter-spacing: -.005em; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .node-sub { display: block; width: 100%; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .node-del {
-  position: absolute; right: -9px; top: -9px; width: 22px; height: 22px; padding: 0; border-radius: var(--r-pill); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
+  position: absolute; right: -9px; top: -9px; width: 22px; height: 22px; scale: calc(1 / var(--z, 1)); padding: 0; border-radius: var(--r-pill); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
   display: grid; place-items: center; box-shadow: var(--shadow-2); opacity: 0; transform: scale(.8); transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease), color var(--t-fast);
 }
 .node:hover .node-del, .node.on .node-del { opacity: 1; transform: none; }
 .node-del:hover { color: var(--bad); border-color: var(--bad); }
 
 /* 24px hit area around a 10px dot, so ports are easy to grab */
-.port { position: absolute; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; cursor: crosshair; touch-action: none; }
+.port { scale: min(1.6, calc(1 / var(--z, 1))); position: absolute; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; cursor: crosshair; touch-action: none; }
 .port::after {
   content: ''; width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--surface); border: 2px solid var(--bb);
   transition: transform var(--t-fast) var(--ease), background var(--t-fast);
@@ -237,7 +237,9 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
 .port.movable { cursor: grab; }
 
 .edge-x {
-  position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; padding: 0; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line-2); color: var(--ink-2);
+  /* sits above the line, not on it, so the shaft and arrowhead stay visible */
+  position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; padding: 0;
+  scale: calc(1 / var(--z, 1)); translate: 0 calc(-24px / var(--z, 1)); border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line-2); color: var(--ink-2);
   display: grid; place-items: center; box-shadow: var(--shadow-1); opacity: 0; transform: scale(.8); pointer-events: none;
   transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease), color var(--t-fast), border-color var(--t-fast);
 }
@@ -419,17 +421,17 @@ tr.click:hover td { background: var(--bb-wash); }
   .palette-row { flex: none; align-items: center; }
   .chips { flex-wrap: nowrap; }
   .chip { flex: none; }
-  .canvas-scroll { padding: 72px 16px calc(var(--sheet-peek) + 84px) 0; }
-  /* the controls ride on the sheet's top edge (transform only, so it stays smooth while dragging) */
-  .float-row { left: 8px; right: 8px; bottom: calc(var(--sheet-peek) + 10px); flex-direction: column; align-items: stretch; gap: 8px; transform: translateY(calc(var(--sheet-peek) - var(--sheet-visible, var(--sheet-peek)))); transition: opacity var(--t-base) var(--ease); }
-  .builder[data-sheet='full'] .float-row { opacity: 0; pointer-events: none; }
+  .canvas-scroll { padding: 128px 16px calc(var(--sheet-peek) + 84px) 0; scroll-padding: 140px 16px calc(var(--sheet-visible, var(--sheet-peek)) + 24px) 24px; }
+  /* Zoom and Tidy sit under the palette, out of the way of the cards; the sheet owns the bottom of the screen. */
+  .float-row { left: 8px; right: 8px; top: 68px; bottom: auto; flex-direction: column; align-items: flex-end; gap: 8px; }
   .float-status { max-width: none; padding: 8px 12px; }
   .float-status > div { min-width: 0; }
   .float-status > div > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .float-status .line2 { display: none; }
-  .float-status.idle { display: none; }
+  .float-status.idle, .float-status.ok { display: none; } /* the header already says Ready; only problems earn space here */
+  .float-status.warn { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom) + 12px); z-index: 25; }
   .float-view { align-self: flex-end; }
-  .empty { top: 214px; }
+  .empty { top: 250px; }
   .empty-card .drag-hint { display: none; }
   .head-actions .btn { height: 40px; }
   .empty-card { padding: 8px 20px; }
@@ -461,6 +463,6 @@ tr.click:hover td { background: var(--bb-wash); }
   .nav-item { min-height: 44px; }
   .port { width: 44px; height: 44px; margin: -10px; }
   .node-del { width: 32px; height: 32px; right: -14px; top: -14px; }
-  .edge-x { width: 32px; height: 32px; margin: -16px 0 0 -16px; }
+  .edge-x { width: 32px; height: 32px; margin: -16px 0 0 -16px; translate: 0 calc(-30px / var(--z, 1)); }
 }
 .node.source .node-kicker, .node.source .node-sub { color: var(--ink-2); }

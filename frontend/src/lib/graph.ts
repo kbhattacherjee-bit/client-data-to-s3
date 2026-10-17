@@ -52,7 +52,7 @@ export function layout(g: Graph): Graph {
   nodes.forEach((n) => (cols[d(n.id, 0)] ||= []).push(n));
   Object.entries(cols).forEach(([k, ns]) =>
     ns.forEach((n, i) => {
-      n.x = 24 + Number(k) * 252;
+      n.x = 24 + Number(k) * (NODE_W + 76); // 76px between cards leaves room for a readable arrow
       n.y = 40 + i * 108;
     }),
   );

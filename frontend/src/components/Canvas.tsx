@@ -194,7 +194,7 @@ export function Canvas({ app }: { app: AppState }) {
   const canHover = !useMediaQuery('(hover: none)');
   const showEdgeControl = (e: Edge) => hoverEdge === e || (!canHover && (e.from === selected || e.to === selected));
   const hoverOn = (e: Edge) => { window.clearTimeout(leaveTimer.current); setHoverEdge(e); };
-  const hoverOff = () => { window.clearTimeout(leaveTimer.current); leaveTimer.current = window.setTimeout(() => setHoverEdge(null), 140); };
+  const hoverOff = () => { window.clearTimeout(leaveTimer.current); leaveTimer.current = window.setTimeout(() => setHoverEdge(null), 220); };
 
   return (
     <div
@@ -215,7 +215,7 @@ export function Canvas({ app }: { app: AppState }) {
         <div
           ref={canvasRef}
           className="canvas"
-          style={{ width: cw, height: ch, transform: `scale(${zoom})` }}
+          style={{ width: cw, height: ch, transform: `scale(${zoom})`, ['--z' as string]: zoom }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={onDrop}
         >
@@ -234,7 +234,7 @@ export function Canvas({ app }: { app: AppState }) {
               return (
                 <g key={i}>
                   <path d={d} fill="none" stroke={hi ? '#2E21DE' : '#A6A6AE'} strokeWidth={hi ? 2 : 1.5} markerEnd={hi ? 'url(#arrB)' : 'url(#arrG)'} style={{ transition: 'stroke 200ms cubic-bezier(0.22,1,0.36,1)' }} />
-                  <path className="hit" d={d} fill="none" stroke="transparent" strokeWidth={16} onMouseEnter={() => hoverOn(e)} onMouseLeave={hoverOff} />
+                  <path className="hit" d={d} fill="none" stroke="transparent" strokeWidth={22} onMouseEnter={() => hoverOn(e)} onMouseLeave={hoverOff} />
                 </g>
               );
             })}
