@@ -31,6 +31,7 @@
   --shadow-4: 0 24px 64px rgba(14, 14, 16, .14), 0 4px 12px rgba(14, 14, 16, .06);
   --focus: 0 0 0 3px rgba(46, 33, 222, .25);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring-settle: cubic-bezier(0.34, 1.56, 0.64, 1); /* slight overshoot; set to var(--ease) to remove the bounce */
   --t-fast: 120ms; --t-base: 200ms; --t-slow: 360ms;
 
   /* translucent material for floating chrome */
@@ -193,12 +194,13 @@ button:focus-visible, .chip:focus-visible, .node:focus-visible { border-radius: 
   position: absolute; width: 216px; height: 84px; padding: 11px 14px; border-radius: 12px; cursor: grab; user-select: none; touch-action: none;
   background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-1);
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  transition: box-shadow var(--t-base) var(--ease), transform var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
+  /* a card let go of settles back with a small spring, not a plain ease */
+  transition: box-shadow var(--t-base) var(--ease), transform 460ms var(--spring-settle), border-color var(--t-base) var(--ease);
   animation: node-in var(--t-slow) var(--ease) backwards;
 }
 .node:hover { box-shadow: var(--shadow-2); }
 .node.on { border-color: var(--bb); box-shadow: 0 0 0 2px var(--bb), var(--shadow-2); }
-.node.dragging { cursor: grabbing; transform: scale(1.02); box-shadow: var(--shadow-3), 0 0 0 2px var(--bb); transition-duration: var(--t-fast); }
+.node.dragging { cursor: grabbing; transform: scale(1.03); box-shadow: var(--shadow-3), 0 0 0 2px var(--bb); transition: box-shadow var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
 .node.source { background: var(--bb-wash); border-color: var(--bb-tint); }
 .node.source.on { border-color: var(--bb); }
 .node.output { background: var(--bb); border-color: var(--bb); color: #fff; }

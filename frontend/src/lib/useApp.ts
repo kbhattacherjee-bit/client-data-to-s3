@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LAYOUT_SPRING, ZOOM_SPRING } from './motion';
 import { SpringSet } from './spring';
 import { datasets } from './catalog';
 import { compileFlow, firstBlocking } from './sql';
@@ -39,23 +40,22 @@ export function useApp() {
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const zoomTarget = useRef(1);
-  const springs = useRef<SpringSet>();
+  const springs = useRef<SpringSet>(); // card positions
+  const zoomSpring = useRef<SpringSet>();
   if (!springs.current) {
-    springs.current = new SpringSet({ response: 0.42, damping: 1 }, (v) => {
-      if (v.zoom !== undefined) setZoom(v.zoom);
-      if (Object.keys(v).some((k) => k !== 'zoom')) {
-        setGraph((g) => ({
-          ...g,
-          nodes: g.nodes.map((n) => {
-            const x = v[n.id + '.x'];
-            const y = v[n.id + '.y'];
-            return x === undefined && y === undefined ? n : { ...n, x: x ?? n.x, y: y ?? n.y };
-          }),
-        }));
-      }
+    springs.current = new SpringSet(LAYOUT_SPRING, (v) => {
+      setGraph((g) => ({
+        ...g,
+        nodes: g.nodes.map((n) => {
+          const x = v[n.id + '.x'];
+          const y = v[n.id + '.y'];
+          return x === undefined && y === undefined ? n : { ...n, x: x ?? n.x, y: y ?? n.y };
+        }),
+      }));
     });
+    zoomSpring.current = new SpringSet(ZOOM_SPRING, (v) => v.zoom !== undefined && setZoom(v.zoom));
   }
-  useEffect(() => () => springs.current?.dispose(), []);
+  useEffect(() => () => { springs.current?.dispose(); zoomSpring.current?.dispose(); }, []);
 
   /** Applies a graph whose node positions are the targets: existing nodes glide there, new ones appear in place. */
   const commit = (g: Graph) => {
@@ -74,7 +74,7 @@ export function useApp() {
     springs.current!.retarget(targets, current);
   };
   /** A different flow is loaded: stop any motion that belonged to the previous one. */
-  const stopNodeMotion = () => springs.current!.cancelWhere((k) => k !== 'zoom');
+  const stopNodeMotion = () => springs.current!.cancelWhere(() => true);
 
   const { nodes } = graph;
   const view = cleanGraph(nodes, graph.edges);
@@ -83,7 +83,7 @@ export function useApp() {
 
   const zoomTo = useCallback((t: number) => {
     zoomTarget.current = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(t * 100) / 100));
-    springs.current!.retarget({ zoom: zoomTarget.current }, { zoom: zoomRef.current });
+    zoomSpring.current!.retarget({ zoom: zoomTarget.current }, { zoom: zoomRef.current });
   }, []);
   const zoomBy = useCallback((d: number) => zoomTo(zoomTarget.current + d), [zoomTo]);
 
