@@ -126,3 +126,14 @@
   so the shaft and arrowhead stay visible, and it keeps a constant on-screen size (20px, 32px on touch) at any zoom.
   Delete badges and ports also stop shrinking when zoomed out. On phones the zoom and Tidy controls sit under the palette
   and the "Ready" status is dropped there (the header chip says it); problems still appear.
+
+## 2026-10-09: Styled dropdowns
+
+- All seven native `<select>` controls (filter column, comparison and all/any, group column and calculation, "Takes data
+  from", join key and calculation inputs, request picker) use one `Select` component (`components/Select.tsx`).
+- With a mouse or keyboard it opens a translucent menu in a portal, so the side panel's scrolling never clips it. It flips
+  above the control when there is no room below, eases in from the control, shows a check on the current choice, and keeps
+  focus on the control. Arrow keys, Home, End, Page keys, typeahead (a space continues a search), Enter or Space to choose,
+  and Escape (closes only the menu, not a dialog behind it) all work. It follows the ARIA select-only combobox pattern.
+- On touch screens (`hover: none`) it renders the native picker on purpose: the wheel on iOS and the full-screen list on
+  Android are better than any web imitation.

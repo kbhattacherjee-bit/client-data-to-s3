@@ -1,6 +1,7 @@
 import { arityOf, OPS_BY_TYPE, OP_PHRASE } from '../../../packages/compiler/src';
 import { isGroup, type ColType, type FilterOp, type Rule, type RuleGroup, type RuleItem } from '../lib/types';
 import { ChipsInput } from './ChipsInput';
+import { Select } from './Select';
 
 const MAX_DEPTH = 3;
 
@@ -31,10 +32,7 @@ export function RuleEditor({ value, onChange, cols, types, defaultCol, depth = 1
       <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <label className="row" style={{ alignItems: 'center', gap: 6 }}>
           <span>Match</span>
-          <select className="field inline" aria-label="How the rules combine" value={value.match} onChange={(e) => onChange({ ...value, match: e.target.value as 'all' | 'any' })}>
-            <option value="all">all</option>
-            <option value="any">any</option>
-          </select>
+          <Select inline label="How the rules combine" value={value.match} options={[{ value: 'all', label: 'all' }, { value: 'any', label: 'any' }]} onChange={(v) => onChange({ ...value, match: v as 'all' | 'any' })} />
           <span style={{ whiteSpace: 'nowrap' }}>of these</span>
         </label>
         {onRemove && <button className="btn sm" onClick={onRemove}>Remove group</button>}
@@ -70,12 +68,8 @@ function RuleRow({ item, cols, ops, onChange, onColumn, onRemove }: {
   const kind = arityOf(item.op);
   return (
     <div className="rule">
-      <select className="field" aria-label="Column" value={item.col} onChange={(e) => onColumn(e.target.value)}>
-        {cols.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
-      <select className="field" aria-label="Comparison" value={item.op} onChange={(e) => onChange({ ...item, op: e.target.value as FilterOp })}>
-        {ops.map((k) => <option key={k} value={k}>{OP_PHRASE[k]}</option>)}
-      </select>
+      <Select label="Column" value={item.col} options={cols.map((o) => ({ value: o, label: o }))} onChange={onColumn} />
+      <Select label="Comparison" value={item.op} options={ops.map((k) => ({ value: k, label: OP_PHRASE[k] }))} onChange={(v) => onChange({ ...item, op: v as FilterOp })} />
       {kind === 'one' && <input className="field" aria-label="Value" value={item.val} placeholder="Value" onChange={(e) => onChange({ ...item, val: e.target.value })} />}
       {kind === 'two' && (
         <div className="row" style={{ alignItems: 'center' }}>

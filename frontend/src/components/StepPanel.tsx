@@ -11,6 +11,7 @@ import { DataTable } from './DataTable';
 import { Icon } from './Icon';
 import { GroupEditor } from './GroupEditor';
 import { RuleEditor } from './RuleEditor';
+import { Select } from './Select';
 import { SqlPanel } from './SqlPanel';
 
 const NAMES: Record<NodeType, string> = { source: 'Source', select: 'Select columns', filter: 'Filter rows', group: 'Group by', addcol: 'Add columns', join: 'Join', union: 'Union', s3: 'Amazon S3' };
@@ -34,13 +35,9 @@ function Choice({ on, onClick, children, center }: { on: boolean; onClick: () =>
   );
 }
 
-function ColSelect({ value, cols, blank, onChange }: { value: string; cols: string[]; blank?: string; onChange: (v: string) => void }) {
-  return (
-    <select className="field" value={value} onChange={(e) => onChange(e.target.value)}>
-      {blank !== undefined && <option value="">{blank}</option>}
-      {cols.map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
-  );
+function ColSelect({ value, cols, blank, onChange, label }: { value: string; cols: string[]; blank?: string; onChange: (v: string) => void; label: string }) {
+  const options = [...(blank !== undefined ? [{ value: '', label: blank }] : []), ...cols.map((o) => ({ value: o, label: o }))];
+  return <Select label={label} value={value} options={options} onChange={onChange} />;
 }
 
 /** Connect and disconnect without dragging: pick what feeds each input of the selected step. */
@@ -63,15 +60,12 @@ function Inputs({ app, node }: { app: AppState; node: FlowNode }) {
         return (
           <label key={port} className="stack-sm" style={{ gap: 4 }}>
             {name && <span className="small faint">{name}</span>}
-            <select
-              className="field"
-              aria-label={name ? `${name}, takes data from` : 'Takes data from'}
+            <Select
+              label={name ? `${name}, takes data from` : 'Takes data from'}
               value={edge?.from ?? ''}
-              onChange={(e) => (e.target.value === '' ? edge && app.removeEdge(edge) : app.connect(e.target.value, node.id, port, edge))}
-            >
-              <option value="">Not connected</option>
-              {options.map((m) => <option key={m.id} value={m.id}>{label(m)}</option>)}
-            </select>
+              options={[{ value: '', label: 'Not connected' }, ...options.map((m) => ({ value: m.id, label: label(m) }))]}
+              onChange={(v) => (v === '' ? edge && app.removeEdge(edge) : app.connect(v, node.id, port, edge))}
+            />
           </label>
         );
       })}
@@ -220,11 +214,11 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
           <div className="label" style={{ margin: 0 }}>New column name</div>
           <input className="field mono" value={c.name ?? ''} onChange={(e) => patchCfg(id, { name: e.target.value.toLowerCase().replace(/\s+/g, '_') })} />
           <div className="label" style={{ margin: 0 }}>Calculate</div>
-          <ColSelect value={c.a ?? ''} cols={inCols} blank="Choose a column" onChange={(a) => patchCfg(id, { a })} />
+          <ColSelect label="Column to calculate" value={c.a ?? ''} cols={inCols} blank="Choose a column" onChange={(a) => patchCfg(id, { a })} />
           <div className="choices-row" style={{ gap: 6 }}>
             {ARITH.map(([k, glyph]) => <Choice key={k} center on={c.op === k} onClick={() => patchCfg(id, { op: k })}>{glyph}</Choice>)}
           </div>
-          <ColSelect value={c.b ?? ''} cols={inCols} blank="A fixed number" onChange={(b) => patchCfg(id, { b })} />
+          <ColSelect label="Second column" value={c.b ?? ''} cols={inCols} blank="A fixed number" onChange={(b) => patchCfg(id, { b })} />
           <input className="field" style={{ opacity: c.b ? 0.4 : 1 }} value={c.num ?? ''} placeholder="Number, e.g. 0.25" onChange={(e) => patchCfg(id, { num: e.target.value })} />
         </div>
       )}
@@ -238,7 +232,7 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
           {node.type === 'join' ? (
             <>
               <div className="label" style={{ margin: 0 }}>Match rows on</div>
-              <ColSelect value={c.key ?? ''} cols={common} blank="Choose a shared column" onChange={(key) => patchCfg(id, { key })} />
+              <ColSelect label="Match rows on" value={c.key ?? ''} cols={common} blank="Choose a shared column" onChange={(key) => patchCfg(id, { key })} />
               <div className="stack-sm">
                 {([['inner', 'Matching rows only', 'Drops rows with no match'], ['left', 'Keep all rows from the first input', 'Blank where nothing matches']] as const).map(([k, name, meta]) => (
                   <Choice key={k} on={c.type === k} onClick={() => patchCfg(id, { type: k })}>

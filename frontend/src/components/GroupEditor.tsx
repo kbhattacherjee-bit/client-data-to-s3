@@ -1,4 +1,5 @@
 import type { AggFn, AggSpec, ColType } from '../lib/types';
+import { Select } from './Select';
 
 const FN_LABEL: Record<AggFn, string> = { sum: 'Sum', avg: 'Average', min: 'Smallest', max: 'Largest', count: 'Count', count_distinct: 'Count distinct' };
 const ALL_FNS = Object.keys(FN_LABEL) as AggFn[];
@@ -49,15 +50,11 @@ export function GroupEditor({ by, aggs, cols, types, onChange }: Props) {
             const fns = fnsFor(typeOf(a.col));
             return (
               <div key={i} className="rule">
-                <select className="field" aria-label="Column" value={a.col} onChange={(e) => {
-                  const fn = fnsFor(typeOf(e.target.value)).includes(a.fn) ? a.fn : fnsFor(typeOf(e.target.value))[0]!;
-                  setAgg(i, { col: e.target.value, fn });
-                }}>
-                  {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select className="field" aria-label="Calculation" value={a.fn} onChange={(e) => setAgg(i, { fn: e.target.value as AggFn })}>
-                  {fns.map((f) => <option key={f} value={f}>{FN_LABEL[f]}</option>)}
-                </select>
+                <Select label="Column" value={a.col} options={cols.map((c) => ({ value: c, label: c }))} onChange={(col) => {
+                  const fn = fnsFor(typeOf(col)).includes(a.fn) ? a.fn : fnsFor(typeOf(col))[0]!;
+                  setAgg(i, { col, fn });
+                }} />
+                <Select label="Calculation" value={a.fn} options={fns.map((f) => ({ value: f, label: FN_LABEL[f] }))} onChange={(fn) => setAgg(i, { fn: fn as AggFn })} />
                 <div className="row">
                   <input className="field mono" style={{ flex: 1, minWidth: 0 }} aria-label="Column name" value={a.as ?? ''} placeholder={`${a.fn}_${a.col}`} onChange={(e) => setAgg(i, { as: e.target.value.toLowerCase().replace(/\s+/g, '_') })} />
                   <button className="btn sm" onClick={() => onChange({ by, aggs: aggs.filter((_, j) => j !== i) })}>Remove</button>

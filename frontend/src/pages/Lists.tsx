@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
+import { Select } from '../components/Select';
 import { SqlPanel } from '../components/SqlPanel';
 import { clients, datasets, s3Path } from '../lib/catalog';
 import { analyse } from '../lib/graph';
@@ -110,9 +111,9 @@ export function PreviewPage({ app }: { app: AppState }) {
   return (
     <div className="page-scroll">
       <div className="col-narrow" style={{ maxWidth: 900 }}>
-        <select className="field" style={{ maxWidth: 420 }} aria-label="Request" value={pv.id} onChange={(e) => app.setPrevId(e.target.value)}>
-          {app.requests.map((r) => <option key={r.id} value={r.id}>{r.name}, {clients[r.client].name}</option>)}
-        </select>
+        <div style={{ maxWidth: 420 }}>
+          <Select label="Request" value={pv.id} options={app.requests.map((r) => ({ value: r.id, label: `${r.name}, ${clients[r.client].name}` }))} onChange={app.setPrevId} />
+        </div>
         <p className="muted">Exactly what the client receives, read from the warehouse.</p>
         <DataTable table={T[s3.id]} limit={12} />
         <div className="mono faint" style={{ wordBreak: 'break-all' }}>{s3Path(s3.cfg.client!, s3.cfg.folder!)}</div>
