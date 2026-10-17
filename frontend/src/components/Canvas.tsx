@@ -3,6 +3,7 @@ import { clients, datasets } from '../lib/catalog';
 import { NODE_H, NODE_W, PORTS, stepName } from '../lib/graph';
 import type { AppState } from '../lib/useApp';
 import { isGroup, type Edge, type FlowNode, type NodeType, type Port, type RuleItem, type Table } from '../lib/types';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import { Icon, type IconName } from './Icon';
 
 const bez = (a: number[], b: number[]) => {
@@ -189,7 +190,9 @@ export function Canvas({ app }: { app: AppState }) {
     else if (kind === 'fn') app.addFn(key as NodeType, undefined, pos);
   };
 
-  const showEdgeControl = (e: Edge) => hoverEdge === e || e.from === selected || e.to === selected;
+  // With a mouse the × appears only while the arrow is hovered. A finger cannot hover, so there it stays on the selected card's arrows.
+  const canHover = !useMediaQuery('(hover: none)');
+  const showEdgeControl = (e: Edge) => hoverEdge === e || (!canHover && (e.from === selected || e.to === selected));
   const hoverOn = (e: Edge) => { window.clearTimeout(leaveTimer.current); setHoverEdge(e); };
   const hoverOff = () => { window.clearTimeout(leaveTimer.current); leaveTimer.current = window.setTimeout(() => setHoverEdge(null), 140); };
 
