@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SpringSet } from './spring';
 import { datasets } from './catalog';
 import { compileFlow, firstBlocking } from './sql';
 import { analyse, blankFlow, chain, cleanGraph, defCfg, layout, PORTS, reach, seedRequests } from './graph';
@@ -17,7 +18,7 @@ export const MAX_ZOOM = 1.6;
 export function useApp() {
   const [page, setPage] = useState<Page>('new');
   const [graph, setGraph] = useState<Graph>(blankFlow);
-  const [selected, setSelected] = useState('s3');
+  const [selected, setSelected] = useState(''); // nothing selected on load: the panel shows guidance, not an error
   const [zoom, setZoom] = useState(1);
   const [requests, setRequests] = useState<ReportRequest[]>(seedRequests);
   const [prevId, setPrevId] = useState('R-101');
@@ -32,12 +33,59 @@ export function useApp() {
     toastTimer.current = window.setTimeout(() => setToastText(''), 3200);
   }, []);
 
+  // Layout changes and zoom glide on critically damped springs (no overshoot, interruptible, velocity carries over).
+  const graphRef = useRef(graph);
+  graphRef.current = graph;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const zoomTarget = useRef(1);
+  const springs = useRef<SpringSet>();
+  if (!springs.current) {
+    springs.current = new SpringSet({ response: 0.42, damping: 1 }, (v) => {
+      if (v.zoom !== undefined) setZoom(v.zoom);
+      if (Object.keys(v).some((k) => k !== 'zoom')) {
+        setGraph((g) => ({
+          ...g,
+          nodes: g.nodes.map((n) => {
+            const x = v[n.id + '.x'];
+            const y = v[n.id + '.y'];
+            return x === undefined && y === undefined ? n : { ...n, x: x ?? n.x, y: y ?? n.y };
+          }),
+        }));
+      }
+    });
+  }
+  useEffect(() => () => springs.current?.dispose(), []);
+
+  /** Applies a graph whose node positions are the targets: existing nodes glide there, new ones appear in place. */
+  const commit = (g: Graph) => {
+    const targets: Record<string, number> = {};
+    const current: Record<string, number> = {};
+    const nodes = g.nodes.map((n) => {
+      targets[n.id + '.x'] = n.x;
+      targets[n.id + '.y'] = n.y;
+      const old = graphRef.current.nodes.find((o) => o.id === n.id);
+      if (!old) return n;
+      current[n.id + '.x'] = old.x;
+      current[n.id + '.y'] = old.y;
+      return { ...n, x: old.x, y: old.y };
+    });
+    setGraph({ nodes, edges: g.edges });
+    springs.current!.retarget(targets, current);
+  };
+  /** A different flow is loaded: stop any motion that belonged to the previous one. */
+  const stopNodeMotion = () => springs.current!.cancelWhere((k) => k !== 'zoom');
+
   const { nodes } = graph;
   const view = cleanGraph(nodes, graph.edges);
   const { T, st } = analyse(view);
   const sql = compileFlow(view);
 
-  const zoomBy = useCallback((d: number) => setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + d) * 100) / 100))), []);
+  const zoomTo = useCallback((t: number) => {
+    zoomTarget.current = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(t * 100) / 100));
+    springs.current!.retarget({ zoom: zoomTarget.current }, { zoom: zoomRef.current });
+  }, []);
+  const zoomBy = useCallback((d: number) => zoomTo(zoomTarget.current + d), [zoomTo]);
 
   const patchCfg = (id: string, patch: Cfg | ((c: Cfg) => Cfg)) =>
     setGraph((g) => ({
@@ -45,8 +93,11 @@ export function useApp() {
       nodes: g.nodes.map((n) => (n.id === id ? { ...n, cfg: { ...n.cfg, ...(typeof patch === 'function' ? patch(n.cfg) : patch) } } : n)),
     }));
 
-  const moveNode = (id: string, x: number, y: number) =>
+  /** Dragging is 1:1 with the pointer: no animation, and any glide in progress for that node is dropped. */
+  const moveNode = (id: string, x: number, y: number) => {
+    springs.current!.cancel([id + '.x', id + '.y']);
     setGraph((g) => ({ ...g, nodes: g.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)) }));
+  };
 
   /**
    * Adds a step. With no position it is inserted after the selected step and the flow is tidied.
@@ -59,22 +110,25 @@ export function useApp() {
     let nodes = graph.nodes.concat(node);
     const s3 = graph.nodes.find((n) => n.type === 's3')!;
     const s3Free = !edges.some((e) => e.to === s3.id);
+    // Insert after the selected step; with nothing (or the output) selected, append just before the output.
     const sel = graph.nodes.find((n) => n.id === selected);
-    if (!pos && sel && sel.type !== 's3' && type !== 'source') {
+    const feeder = graph.edges.find((e) => e.to === s3.id)?.from;
+    const anchor = graph.nodes.find((n) => n.id === (sel && sel.type !== 's3' ? sel.id : feeder));
+    if (!pos && anchor && type !== 'source') {
       const inPort = PORTS[type][0][0];
-      const down = edges.find((e) => e.from === sel.id);
+      const down = edges.find((e) => e.from === anchor.id);
       if (down) edges = edges.map((e) => (e === down ? { ...e, from: id } : e));
       else if (s3Free) edges.push({ from: id, to: s3.id, port: 'in' });
-      edges.push({ from: sel.id, to: id, port: inPort });
+      edges.push({ from: anchor.id, to: id, port: inPort });
     } else if (type === 'source' && graph.nodes.length === 1 && s3Free) {
       edges.push({ from: id, to: s3.id, port: 'in' }); // first source on a blank canvas
     }
     if (type === 'source' && !s3.cfg.folder && key) {
       nodes = nodes.map((n) => (n.id === s3.id ? { ...n, cfg: { ...n.cfg, folder: datasets[key].folder } } : n));
     }
-    let g: Graph = { nodes, edges };
-    if (!pos) g = layout(g);
-    setGraph(g);
+    const g: Graph = { nodes, edges };
+    if (pos) setGraph(g);
+    else commit(layout(g));
     setSelected(id);
   };
 
@@ -87,8 +141,8 @@ export function useApp() {
     const up = ins[0]?.from;
     let edges = graph.edges.filter((e) => e.to !== n.id && e.from !== n.id);
     if (up) edges = edges.concat(outs.map((e) => ({ ...e, from: up })));
-    setGraph(layout({ nodes: graph.nodes.filter((x) => x.id !== n.id), edges }));
-    setSelected(up || 's3');
+    commit(layout({ nodes: graph.nodes.filter((x) => x.id !== n.id), edges }));
+    setSelected(up || '');
   };
 
   /** Connects `from` to an input. With `replacing`, that arrow is moved instead of a new one added. */
@@ -103,13 +157,15 @@ export function useApp() {
   };
 
   const removeEdge = (e: Edge) => setGraph((g) => ({ ...g, edges: g.edges.filter((q) => q !== e) }));
-  const tidy = () => setGraph((g) => layout(cleanGraph(g.nodes, g.edges)));
+  const tidy = () => commit(layout(cleanGraph(graphRef.current.nodes, graphRef.current.edges)));
   const resetFlow = () => {
+    stopNodeMotion();
     setGraph(blankFlow());
-    setSelected('s3');
+    setSelected('');
   };
 
   const loadGraph = (g: Graph, sel: string) => {
+    stopNodeMotion();
     setGraph({ nodes: g.nodes, edges: g.edges });
     setSelected(sel);
     setPage('new');
@@ -144,16 +200,16 @@ export function useApp() {
   const setStatus = (id: string, status: RequestStatus) => setRequests((r) => r.map((x) => (x.id === id ? { ...x, status } : x)));
 
   // Keyboard: Ctrl/Cmd +/-/0 zoom, wheel zoom, Delete removes the selected step (not while typing).
-  const live = useRef({ page, delNode, zoomBy });
-  live.current = { page, delNode, zoomBy };
+  const live = useRef({ page, delNode, zoomBy, zoomTo });
+  live.current = { page, delNode, zoomBy, zoomTo };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { page: p, delNode: del, zoomBy: zb } = live.current;
+      const { page: p, delNode: del, zoomBy: zb, zoomTo: zt } = live.current;
       if (p !== 'new') return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') { e.preventDefault(); zb(0.1); }
         else if (e.key === '-' || e.key === '_') { e.preventDefault(); zb(-0.1); }
-        else if (e.key === '0') { e.preventDefault(); setZoom(1); }
+        else if (e.key === '0') { e.preventDefault(); zt(1); }
         return;
       }
       const tag = document.activeElement?.tagName ?? '';
@@ -174,7 +230,7 @@ export function useApp() {
   }, []);
 
   return {
-    page, setPage, graph: view, T, st, sql, selected, setSelected, zoom, setZoom, zoomBy,
+    page, setPage, graph: view, T, st, sql, selected, setSelected, zoom, zoomTo, zoomBy,
     requests, prevId, setPrevId, toast, showToast,
     patchCfg, moveNode, addFn, delNode, connect, removeEdge, tidy, resetFlow, loadGraph, startWith, submit, setStatus,
   };

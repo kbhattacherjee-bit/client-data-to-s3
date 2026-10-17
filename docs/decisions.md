@@ -76,3 +76,23 @@
 - A rule with no value is still ignored with a warning (SPEC 7); blank checks need no value and are never ignored.
   `between` with only one end filled is an error.
 - Not added: regex, case-sensitive matching, relative dates ("last 7 days"), comparing two columns.
+
+## 2026-10-09: Visual and motion redesign
+
+- Brief (from the user): make the UI classy and Apple-like while keeping Clear Street principles. Followed the user's
+  `apple-design` skill and the Clear Street brand skill and design-system tokens.
+- Where the two disagree, resolved as: springs are **critically damped (damping 1, no overshoot)**, which satisfies
+  Apple's default and Clear Street's "no bouncy springs"; plain CSS transitions use Clear Street's ease-out
+  `cubic-bezier(0.22, 1, 0.36, 1)` at 120/200/360 ms. Modal scrim stays a plain 40% dim (no blur); translucent
+  material (backdrop blur) is used only on floating chrome. Buttons and chips are pills; inputs 6px; cards 10px.
+- **Blueberry is `#2E21DE`** (2026 brand guide). The design-system CSS in the handoff says `#0000F5`; the guide is newer
+  and notes it corrected a typo, so it wins. One variable (`--bb`) in `styles.css` changes it everywhere.
+- Typeface is Inter (UI) and JetBrains Mono (code and identifiers), both bundled through @fontsource. Reyhan is not used.
+- The Clear Street logo is **not** used in the header: the site is public. A neutral mark stands in. Decide before adding it.
+- Layout: the canvas is full-bleed with the palette, status and zoom controls floating above it as translucent layers.
+  The side panel has a fixed width so switching Step and SQL never shifts the canvas. Nothing is selected on load.
+- Motion: Tidy up, add and delete re-layout, and zoom run on interruptible springs (`src/lib/spring.ts`) that keep
+  velocity when retargeted. Dragging stays 1:1 with the pointer. All motion respects `prefers-reduced-motion`
+  (movement is dropped, opacity changes stay); `prefers-reduced-transparency` and `prefers-contrast: more` are handled.
+- Node cards are 216px wide (was 184px) so names are no longer truncated; columns are 252px apart.
+- Still open from SPEC 12: a keyboard and non-drag way to connect steps; dark mode; mobile.

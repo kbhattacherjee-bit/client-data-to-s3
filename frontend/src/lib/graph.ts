@@ -2,7 +2,7 @@ import { datasets, isCurrency } from './catalog';
 import { evalAll } from './mockEngine';
 import type { Cell, Cfg, Edge, FlowNode, Graph, NodeType, Port, ReportRequest, Table } from './types';
 
-export const NODE_W = 184;
+export const NODE_W = 216;
 export const NODE_H = 84;
 
 /** Input ports per step type with their vertical position (fraction of node height). */
@@ -52,7 +52,7 @@ export function layout(g: Graph): Graph {
   nodes.forEach((n) => (cols[d(n.id, 0)] ||= []).push(n));
   Object.entries(cols).forEach(([k, ns]) =>
     ns.forEach((n, i) => {
-      n.x = 24 + Number(k) * 224;
+      n.x = 24 + Number(k) * 252;
       n.y = 40 + i * 108;
     }),
   );

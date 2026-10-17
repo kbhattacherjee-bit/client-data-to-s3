@@ -4,6 +4,7 @@ import { inputOf } from '../lib/panel';
 import type { AppState } from '../lib/useApp';
 import type { ArithOp, NodeType } from '../lib/types';
 import { DataTable } from './DataTable';
+import { Icon } from './Icon';
 import { GroupEditor } from './GroupEditor';
 import { RuleEditor } from './RuleEditor';
 import { SqlPanel } from './SqlPanel';
@@ -21,9 +22,9 @@ const HELPS: Record<NodeType, string> = {
 };
 const ARITH: [ArithOp, string][] = [['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷']];
 
-function Card({ on, onClick, children, left }: { on: boolean; onClick: () => void; children: React.ReactNode; left?: boolean }) {
+function Choice({ on, onClick, children, center }: { on: boolean; onClick: () => void; children: React.ReactNode; center?: boolean }) {
   return (
-    <button type="button" className={'card' + (on ? ' sel' : '') + (left ? ' left' : '')} aria-pressed={on} onClick={onClick}>
+    <button type="button" className={'choice' + (on ? ' sel' : '') + (center ? ' center' : '')} aria-pressed={on} onClick={onClick}>
       {children}
     </button>
   );
@@ -43,7 +44,8 @@ export type PanelTab = 'step' | 'sql';
 export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; setTab: (t: PanelTab) => void }) {
   const { graph, T, selected, patchCfg, showToast } = app;
   const [draft, setDraft] = useState('');
-  const node = graph.nodes.find((n) => n.id === selected) ?? graph.nodes.find((n) => n.type === 's3')!;
+  const picked = graph.nodes.find((n) => n.id === selected);
+  const node = picked ?? graph.nodes.find((n) => n.type === 's3')!;
   const c = node.cfg;
   const t = T[node.id];
   const id = node.id;
@@ -67,18 +69,33 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
 
   const stepIssues = app.sql.ok ? [] : app.sql.issues.filter((i) => i.nodeId === node.id);
 
-  return (
-    <div className={'panel' + (tab === 'sql' ? ' wide' : '')}>
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'step'} className={'tab' + (tab === 'step' ? ' on' : '')} onClick={() => setTab('step')}>Step</button>
-        <button role="tab" aria-selected={tab === 'sql'} className={'tab' + (tab === 'sql' ? ' on' : '')} onClick={() => setTab('sql')}>SQL</button>
-      </div>
-      {tab === 'sql' ? <SqlPanel outcome={app.sql} hint /> : <>
-      {stepIssues.length > 0 && <div className="issue-box">{stepIssues.map((i, k) => <div key={k}>{i.message}</div>)}</div>}
+  const steps = graph.nodes.filter((n) => n.type !== 's3' && n.type !== 'source').length;
+  const sources = graph.nodes.filter((n) => n.type === 'source').length;
+
+  const body = tab === 'sql' ? (
+    <SqlPanel outcome={app.sql} hint />
+  ) : !picked ? (
+    <>
       <div>
-        <div className="kicker">{NAMES[node.type]}</div>
-        <div className="panel-title">{sourceDs ? sourceDs.name : NAMES[node.type]}</div>
-        <div className="muted" style={{ marginTop: 4 }}>{HELPS[node.type]}</div>
+        <div className="panel-kicker">{graph.nodes.length === 1 ? 'Getting started' : 'Nothing selected'}</div>
+        <h2 className="t-panel" style={{ marginTop: 2 }}>{graph.nodes.length === 1 ? 'Build your report' : 'Select a step to edit it'}</h2>
+        <p className="muted" style={{ marginTop: 6 }}>
+          {graph.nodes.length === 1 ? 'Shape a governed dataset, check the result, then send it for approval.' : `${sources} source${sources === 1 ? '' : 's'} and ${steps} step${steps === 1 ? '' : 's'} so far. Click any card on the canvas to change its settings.`}
+        </p>
+      </div>
+      <ol className="hint-list">
+        <li><span className="hint-n">1</span><div><div className="label" style={{ marginBottom: 0 }}>Choose a source</div><div className="small muted">Pick the dataset the report starts from.</div></div></li>
+        <li><span className="hint-n">2</span><div><div className="label" style={{ marginBottom: 0 }}>Shape the data</div><div className="small muted">Add steps to hide columns, filter rows, group or join.</div></div></li>
+        <li><span className="hint-n">3</span><div><div className="label" style={{ marginBottom: 0 }}>Review and submit</div><div className="small muted">Check the preview and the SQL, then send it for approval.</div></div></li>
+      </ol>
+    </>
+  ) : (
+    <>
+      {stepIssues.length > 0 && <div className="issue-box"><Icon name="sparkle" size={16} /><div>{stepIssues.map((i, k) => <div key={k}>{i.message}</div>)}</div></div>}
+      <div>
+        <div className="panel-kicker">{node.type === 'source' ? 'Source' : node.type === 's3' ? 'Output' : 'Step'}</div>
+        <h2 className="t-panel" style={{ marginTop: 2 }}>{sourceDs ? sourceDs.name : NAMES[node.type]}</h2>
+        <p className="muted" style={{ marginTop: 4 }}>{HELPS[node.type]}</p>
       </div>
 
       {sourceDs && (
@@ -155,8 +172,8 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
           <input className="field mono" value={c.name ?? ''} onChange={(e) => patchCfg(id, { name: e.target.value.toLowerCase().replace(/\s+/g, '_') })} />
           <div className="label" style={{ margin: 0 }}>Calculate</div>
           <ColSelect value={c.a ?? ''} cols={inCols} blank="Choose a column" onChange={(a) => patchCfg(id, { a })} />
-          <div className="cards-row" style={{ gap: 6 }}>
-            {ARITH.map(([k, glyph]) => <Card key={k} on={c.op === k} onClick={() => patchCfg(id, { op: k })}>{glyph}</Card>)}
+          <div className="choices-row" style={{ gap: 6 }}>
+            {ARITH.map(([k, glyph]) => <Choice key={k} center on={c.op === k} onClick={() => patchCfg(id, { op: k })}>{glyph}</Choice>)}
           </div>
           <ColSelect value={c.b ?? ''} cols={inCols} blank="A fixed number" onChange={(b) => patchCfg(id, { b })} />
           <input className="field" style={{ opacity: c.b ? 0.4 : 1 }} value={c.num ?? ''} placeholder="Number, e.g. 0.25" onChange={(e) => patchCfg(id, { num: e.target.value })} />
@@ -175,10 +192,10 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
               <ColSelect value={c.key ?? ''} cols={common} blank="Choose a shared column" onChange={(key) => patchCfg(id, { key })} />
               <div className="stack-sm">
                 {([['inner', 'Matching rows only', 'Drops rows with no match'], ['left', 'Keep all rows from the first input', 'Blank where nothing matches']] as const).map(([k, name, meta]) => (
-                  <Card key={k} left on={c.type === k} onClick={() => patchCfg(id, { type: k })}>
+                  <Choice key={k} on={c.type === k} onClick={() => patchCfg(id, { type: k })}>
                     <div style={{ fontWeight: 500 }}>{name}</div>
-                    <div className="small muted" style={{ marginTop: 2 }}>{meta}</div>
-                  </Card>
+                    <div className="small faint" style={{ marginTop: 2, fontWeight: 400 }}>{meta}</div>
+                  </Choice>
                 ))}
               </div>
             </>
@@ -193,17 +210,17 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
           <div>
             <div className="label" style={{ marginBottom: 8 }}>Client</div>
             <div className="stack-sm">
-              {Object.entries(clients).map(([k, cl]) => <Card key={k} left on={c.client === k} onClick={() => patchCfg(id, { client: k })}><span style={{ fontWeight: 500 }}>{cl.name}</span></Card>)}
+              {Object.entries(clients).map(([k, cl]) => <Choice key={k} on={c.client === k} onClick={() => patchCfg(id, { client: k })}>{cl.name}</Choice>)}
             </div>
           </div>
           <div>
             <div className="label">Folder name</div>
-            <input className="field mono" value={c.folder ?? ''} onChange={(e) => patchCfg(id, { folder: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })} />
+            <input className="field mono" value={c.folder ?? ''} placeholder="e.g. commissions_reports" onChange={(e) => patchCfg(id, { folder: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })} />
           </div>
           <div>
             <div className="label" style={{ marginBottom: 8 }}>File type</div>
-            <div className="cards-row">
-              {(['CSV', 'Parquet'] as const).map((k) => <Card key={k} on={c.fmt === k} onClick={() => patchCfg(id, { fmt: k })}>{k}</Card>)}
+            <div className="choices-row">
+              {(['CSV', 'Parquet'] as const).map((k) => <Choice key={k} center on={c.fmt === k} onClick={() => patchCfg(id, { fmt: k })}>{k}</Choice>)}
             </div>
           </div>
           <div>
@@ -220,8 +237,20 @@ export function StepPanel({ app, tab, setTab }: { app: AppState; tab: PanelTab; 
         </div>
         <DataTable table={t} limit={4} mini />
       </div>
-      {node.type !== 's3' && <button className="btn danger" onClick={() => app.delNode()}>Delete this step</button>}
-      </>}
-    </div>
+      {node.type !== 's3' && <button className="btn danger" style={{ alignSelf: 'flex-start' }} onClick={() => app.delNode()}>Delete this step</button>}
+    </>
+  );
+
+  return (
+    <aside className="panel" aria-label="Details">
+      <div className="panel-head">
+        <div className="segmented" role="tablist" data-tab={tab}>
+          <button role="tab" className="seg" aria-selected={tab === 'step'} onClick={() => setTab('step')}>Step</button>
+          <button role="tab" className="seg" aria-selected={tab === 'sql'} onClick={() => setTab('sql')}>SQL</button>
+        </div>
+      </div>
+      {/* keyed so each tab or step change plays the same short entrance */}
+      <div className="panel-body" key={tab + ':' + (picked?.id ?? '')}>{body}</div>
+    </aside>
   );
 }

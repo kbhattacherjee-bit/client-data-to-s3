@@ -40,7 +40,7 @@ export function RuleEditor({ value, onChange, cols, types, defaultCol, depth = 1
         {onRemove && <button className="btn sm" onClick={onRemove}>Remove group</button>}
       </div>
 
-      {value.rules.length === 0 && <div className="empty">{depth > 1 ? 'No rules in this group yet.' : 'No rules yet. Every row passes through.'}</div>}
+      {value.rules.length === 0 && <div className="empty-note">{depth > 1 ? 'No rules in this group yet.' : 'No rules yet. Every row passes through.'}</div>}
       {value.rules.map((item, i) => (
         <div key={i} className="stack-sm">
           {i > 0 && <div className="joiner">{word}</div>}
